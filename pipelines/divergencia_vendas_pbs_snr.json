@@ -53,6 +53,26 @@
         {
             "type": "csv",
             "path": "output/divergencia_vendas_pbs_snr.csv"
+        },
+        {
+            "type": "api",
+            "method": "POST",
+            "endpoint": "localhost:8000/api/etl/divergencia_vendas_pbs_snr",
+            "body": {
+                "success": {
+                    "message": "Mensagem de sucesso"
+                },
+                "error": {
+                    "message": "Mensagem de erro"
+                }
+            },
+            "auth": {
+                "type": "environment_variable",
+                "variable_names": {
+                    "username": "API_USER",
+                    "password": "API_PASS"
+                }
+            }
         }
     ]
 }
