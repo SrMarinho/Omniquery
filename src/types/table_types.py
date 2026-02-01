@@ -1,6 +1,6 @@
 from enum import Enum
 
-class ExtractType(Enum):
+class TableTypes(Enum):
     INLINE = "inline"
     SQL = "sql"
     API = "api"

@@ -1,7 +1,7 @@
 {
     "name": "divergencia_vendas_pbs_snr",
     "description": "Pipeline para processar divergências de vendas entre PBS e Senior", 
-    "load": [
+    "loads": [
         {
             "source": "procfit",
             "tables": [
