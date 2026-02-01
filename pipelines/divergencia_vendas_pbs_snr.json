@@ -1,77 +1,47 @@
 {
     "name": "divergencia_vendas_pbs_snr",
     "description": "Pipeline para processar divergências de vendas entre PBS e Senior", 
-    "definition": {
-        "extraction": [
-            {
-                "source": "procfit",
-                "extract": [
-                    {
-                        "alias": "nf_faturamento",
-                        "description": "Consulta de faturamento do PBS",
-                        "type": "inline",
-                        "content": "SELECT * FROM nf_faturamento WHERE movimento >= '2025-08-01'"
-                    },
-                    {
-                        "alias": "nf_faturamento_devolucoes",
-                        "description": "Consulta de devoluções de faturamento do PBS",
-                        "type": "inline",
-                        "content": "SELECT * FROM NF_FATURAMENTO_DEVOLUCOES WHERE movimento >= '2025-08-01'"
-                    }
-                ]
-            },
-            {
-                "source": "senior",
-                "extract": [
-                    {
-                        "alias": "clientes",
-                        "description": "Consulta de clientes da Senior",
-                        "type": "inline",
-                        "content": "SELECT * FROM clientes"
-                    }
-                ]
-            }
-            ],
-        "transformation": [
-        ],
-        "load": {
-            "if_exists": "replace"
+    "load": [
+        {
+            "source": "procfit",
+            "tables": [
+                {
+                    "alias": "nf_faturamento",
+                    "description": "Consulta de faturamento do PBS",
+                    "type": "inline",
+                    "content": "SELECT * FROM nf_faturamento WHERE movimento >= '2025-08-01'"
+                },
+                {
+                    "alias": "nf_faturamento_devolucoes",
+                    "description": "Consulta de devoluções de faturamento do PBS",
+                    "type": "inline",
+                    "content": "SELECT * FROM NF_FATURAMENTO_DEVOLUCOES WHERE movimento >= '2025-08-01'"
+                }
+            ]
         },
-        "run": {
-            "type": "inline",
-            "content": "SELECT COUNT(*) FROM nf_faturamento;"
+        {
+            "source": "senior",
+            "tables": [
+                {
+                    "alias": "clientes",
+                    "description": "Consulta de clientes da Senior",
+                    "type": "inline",
+                    "content": "SELECT * FROM clientes"
+                }
+            ]
         }
-    },
+    ],
     "outputs": [
         {
+            "name": "vendas_consolidadas",
+            "query": "SELECT * FROM nf_faturamento LIMIT 10",
             "type": "database",
-            "connection": "default",
-            "table_name": "divergencia_vendas_pbs_snr"
+            "table": "fato_vendas"
         },
         {
-            "type": "file",
-            "file_path": "output/divergencia_vendas_pbs_snr.csv",
-            "format": "csv" 
-        },
-        {
-            "type": "api",
-            "method": "POST",
-            "endpoint": "localhost:8000/api/etl/divergencia_vendas_pbs_snr",
-            "body": {
-                "success": {
-                    "message": "Mensagem de sucesso"
-                },
-                "error": {
-                    "message": "Mensagem de erro"
-                }
-            },
-            "auth": {
-                "type": "environment_variable",
-                "variable_names": {
-                    "username": "API_USER",
-                    "password": "API_PASS"
-                }
-            }
+            "name": "vendas_consolidadas",
+            "query": "SELECT * FROM nf_faturamento LIMIT 10",
+            "type": "csv"
         }
     ]
 }

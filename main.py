@@ -8,7 +8,8 @@ from cli.commands import parse_args
 def main() -> None:
     load_dotenv()
     args = parse_args()
-    app = App(**args)
+    args_dict = vars(args)
+    app = App(**args_dict)
     app.run()
 
 if __name__ == "__main__":

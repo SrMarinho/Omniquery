@@ -1,8 +1,22 @@
+import json
 from src.entities.pipeline import Pipeline
 
 class App:
-    def __init__(self, pipeline: Pipeline) -> None:
-        self.pipeline = pipeline
+    def __init__(self, **kwargs) -> None:
+        self.pipeline_args = kwargs.get('pipeline', None)
+        if not self.pipeline_args:
+            raise ValueError("Pipeline argument is required")
+        
+        self.pipeline = self.load_pipeline()
+
+    def load_pipeline(self) -> Pipeline:
+        if isinstance(self.pipeline_args, str):
+            with open(self.pipeline_args, 'r') as f:
+                data = json.load(f)
+            return Pipeline(**data)
+        else:
+            raise ValueError("Invalid type for pipeline argument")
 
     def run(self) -> None:
         print("App is running")
+        self.pipeline.run()
