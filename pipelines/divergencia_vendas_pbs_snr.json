@@ -33,7 +33,6 @@
             }
             ],
         "transformation": [
-            "SELECT * FROM nf_faturamento Limit 10"
         ],
         "load": {
             "if_exists": "replace"

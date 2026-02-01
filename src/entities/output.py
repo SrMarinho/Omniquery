@@ -1,22 +1,18 @@
-from dataclasses import dataclass
+from pydantic import BaseModel, Field
 from src.types.file_output_format_types import FileOutputFormatTypes
 
-@dataclass
-class Output:
-    type: str
+class Output(BaseModel):
+    type: str = Field(default="")
 
-@dataclass
 class DatabaseOutput(Output):
-    connection: str = "default"
     table_name: str
+    connection: str = Field(default="default")
 
-@dataclass
 class FileOutput(Output):
-    file_path: str
+    file_path: str = Field(default="")
     format: FileOutputFormatTypes = FileOutputFormatTypes.CSV
 
-@dataclass
 class APIOutput(Output):
-    endpoint: str
-    method: str = "POST"
+    endpoint: str = Field(default="")
+    method: str = Field(default="POST")
     options: dict = {}

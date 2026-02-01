@@ -1,24 +1,8 @@
-from sqlalchemy import create_engine, text, Table, Column
-from sqlalchemy.schema import MetaData
-from sqlalchemy.engine import Engine
-from src.config.database import databases
-from src.core.extract.database_extractor import DatabaseExtractor
+from src.entities.pipeline import Pipeline
 
 class App:
-    def __init__(self, name: str, description: str, pipeline: dict, output: dict) -> None:
-        # self.engine = create_engine("duckdb:///application.duckdb")
-        self.name = name
-        self.description = description
+    def __init__(self, pipeline: Pipeline) -> None:
         self.pipeline = pipeline
-        self.output = output
-        self.sources = ["procfit",]
-        self.engines: dict[str, Engine] = {}
 
     def run(self) -> None:
         print("App is running")
-        for source in self.sources:
-            conn_str = databases.get_connection_string(source)
-            engine = create_engine(conn_str)
-            self.engines[source] = engine
-            print(f"Connected to {source} database.") 
-        

@@ -1,10 +1,9 @@
-from dataclasses import dataclass
+from pydantic import BaseModel, Field
 from src.types.extract_types import ExtractType
 
 
-@dataclass
-class Extract:
-    alias: str
-    description: str = ""
-    type: ExtractType = ExtractType.INLINE
-    content: str = ""
+class Extract(BaseModel):
+    alias: str = Field(default="")
+    description: str = Field(default="")
+    type: ExtractType = Field(default=ExtractType.INLINE)
+    content: str = Field(default="")

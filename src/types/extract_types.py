@@ -1,6 +1,6 @@
-from Enurmerate import Enum
+from enum import Enum
 
-class ExtractType(str, Enum):
+class ExtractType(Enum):
     INLINE = "inline"
     SQL = "sql"
     API = "api"

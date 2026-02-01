@@ -1,9 +1,9 @@
-from dataclasses import dataclass
+from pydantic import BaseModel, Field
+from typing import List
 from src.entities.extract import Extract
 
 
-@dataclass
-class Definition:
-    extraction: list[Extract] = []
-    transformation: list[dict] = []
-    load: dict = {}
+class Definition(BaseModel):
+    extraction: List[Extract] = Field(default_factory=list)
+    transformation: List[dict] = Field(default_factory=list)
+    load: dict = Field(default_factory=dict)
