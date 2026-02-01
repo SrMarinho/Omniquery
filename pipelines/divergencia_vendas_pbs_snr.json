@@ -1,10 +1,11 @@
 {
     "name": "divergencia_vendas_pbs_snr",
     "description": "Pipeline para processar divergências de vendas entre PBS e Senior", 
-    "pipeline": {
-        "extract": {
-            "procfit": {
-                "queries": [
+    "definition": {
+        "extraction": [
+            {
+                "source": "procfit",
+                "extract": [
                     {
                         "alias": "nf_faturamento",
                         "description": "Consulta de faturamento do PBS",
@@ -19,8 +20,9 @@
                     }
                 ]
             },
-            "senior": {
-                "queries": [
+            {
+                "source": "senior",
+                "extract": [
                     {
                         "alias": "clientes",
                         "description": "Consulta de clientes da Senior",
@@ -29,30 +31,28 @@
                     }
                 ]
             }
-        },
-        "transform": [
+            ],
+        "transformation": [
             "SELECT * FROM nf_faturamento Limit 10"
         ],
         "load": {
             "if_exists": "replace"
         },
-        "after": [
-            "CREATE INDEX idx_movimento ON nf_faturamento (nf_faturamento);"
-        ],
         "run": {
             "type": "inline",
             "content": "SELECT COUNT(*) FROM nf_faturamento;"
         }
     },
-    "output": [
+    "outputs": [
         {
             "type": "database",
             "connection": "default",
-            "table": "divergencia_vendas_pbs_snr"
+            "table_name": "divergencia_vendas_pbs_snr"
         },
         {
-            "type": "csv",
-            "path": "output/divergencia_vendas_pbs_snr.csv"
+            "type": "file",
+            "file_path": "output/divergencia_vendas_pbs_snr.csv",
+            "format": "csv" 
         },
         {
             "type": "api",

@@ -4,10 +4,14 @@ from sqlalchemy.engine import Engine
 from src.config.database import databases
 from src.core.extract.database_extractor import DatabaseExtractor
 
-class App():
-    def __init__(self, sources: list) -> None:
+class App:
+    def __init__(self, name: str, description: str, pipeline: dict, output: dict) -> None:
         # self.engine = create_engine("duckdb:///application.duckdb")
-        self.sources = sources
+        self.name = name
+        self.description = description
+        self.pipeline = pipeline
+        self.output = output
+        self.sources = ["procfit",]
         self.engines: dict[str, Engine] = {}
 
     def run(self) -> None:
