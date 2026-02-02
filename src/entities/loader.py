@@ -23,8 +23,13 @@ class DatabaseLoader(Loader):
     connection_string: str = "duckdb:///:memory:"
     engine: Engine = create_engine(connection_string)
     
+    def get_source_engine(self) -> None:
+        get_database_config(self.source)
+    
     def run(self) -> None:
         print(f"Running loads from source: {self.source}")
+        self.get_source_engine()
+        return
 
         for table in self.tables:
             with self.engine.connect() as conn:

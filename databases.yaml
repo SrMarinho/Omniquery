@@ -3,6 +3,11 @@ database:
   memory:
     database: database
     connection_string: duckdb:///:memory:
+  
   default:
+    database: database
+    connection_string: duckdb:///database.db
+
+  procfit:
     database: database
     connection_string: duckdb:///database.db
