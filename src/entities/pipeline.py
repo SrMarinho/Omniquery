@@ -1,17 +1,17 @@
 from threading import Thread
 from pydantic import BaseModel, Field, model_validator
 from typing import List, Dict, Any
-from src.entities.load import Load
+from src.entities.loader import Loader, LoaderFactory
 from src.entities.output import OutputFactory, Output
 
 
 class Pipeline(BaseModel):
     name: str = Field(default="")
     description: str = Field(default="")
-    loads: List[Load] = Field(default_factory=list)
-    outputs: List[Output] = Field(default_factory=list)
-
-    def run(self) -> None:
+    loads: List[Loader] = Field(default=[])
+    outputs: List[Output] = Field(default=[])
+    
+    def _run_loads(self) -> None:
         if self.name:
             print(f"Running pipeline: {self.name}")
         loads_theads = []
@@ -23,6 +23,7 @@ class Pipeline(BaseModel):
         for thread in loads_theads:
             thread.join()
 
+    def _run_outputs(self) -> None:
         outputs_threads: List[Thread] = []
         for output in self.outputs:
             t = Thread(target=output.write)
@@ -31,8 +32,32 @@ class Pipeline(BaseModel):
         
         for thread in outputs_threads:
             thread.join()
+
+    def run(self) -> None:
+        self._run_loads()
+        self._run_outputs()
         
+    @model_validator(mode='before')
+    @classmethod
+    def create_concrete_loaders(cls, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Factory method para criar instâncias concretas de Loader"""
+        print("aqui")
+        if 'loads' in data and isinstance(data['loads'], list):
+            concrete_loaders: list[Loader] = []
+            
+            for loader_data in data['loads']:
+                if isinstance(loader_data, dict):
+                    loader_instance = LoaderFactory.create(loader_data)
+                    concrete_loaders.append(loader_instance)
+                elif isinstance(loader_data, Loader):
+                    concrete_loaders.append(loader_data)
+                else:
+                    raise ValueError(f"Tipo inválido para output: {type(loader_data)}")
+            
+            data['loads'] = concrete_loaders
         
+        return data
+    
     @model_validator(mode='before')
     @classmethod
     def create_concrete_outputs(cls, data: Dict[str, Any]) -> Dict[str, Any]:
