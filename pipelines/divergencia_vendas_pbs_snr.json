@@ -39,9 +39,9 @@
             "table": "fato_vendas"
         },
         {
-            "name": "vendas_consolidadas",
+            "name": "vendas_consolidadas.csv",
             "query": "SELECT * FROM nf_faturamento LIMIT 10",
-            "type": "csv"
+            "type": "file"
         }
     ]
 }
