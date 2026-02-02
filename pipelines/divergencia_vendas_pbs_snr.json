@@ -3,6 +3,7 @@
     "description": "Pipeline para processar divergências de vendas entre PBS e Senior", 
     "loads": [
         {
+            "type": "database",
             "source": "procfit",
             "tables": [
                 {
@@ -20,6 +21,7 @@
             ]
         },
         {
+            "type": "database",
             "source": "senior",
             "tables": [
                 {

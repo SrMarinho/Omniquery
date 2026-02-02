@@ -41,7 +41,6 @@ class Pipeline(BaseModel):
     @classmethod
     def create_concrete_loaders(cls, data: Dict[str, Any]) -> Dict[str, Any]:
         """Factory method para criar instâncias concretas de Loader"""
-        print("aqui")
         if 'loads' in data and isinstance(data['loads'], list):
             concrete_loaders: list[Loader] = []
             
@@ -53,6 +52,8 @@ class Pipeline(BaseModel):
                     concrete_loaders.append(loader_data)
                 else:
                     raise ValueError(f"Tipo inválido para output: {type(loader_data)}")
+
+            print(concrete_loaders)
             
             data['loads'] = concrete_loaders
         
