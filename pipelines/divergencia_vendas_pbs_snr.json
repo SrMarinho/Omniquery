@@ -10,13 +10,19 @@
                     "alias": "nf_faturamento",
                     "description": "Consulta de faturamento do PBS",
                     "type": "inline",
-                    "content": "SELECT * FROM nf_faturamento WHERE movimento >= '2025-08-01'"
+                    "content": "SELECT TOP 10 * FROM nf_faturamento WHERE movimento >= '2025-08-01'",
+                    "options": {
+                        "if_exists": "replace"
+                    }
                 },
                 {
                     "alias": "nf_faturamento_devolucoes",
                     "description": "Consulta de devoluções de faturamento do PBS",
                     "type": "inline",
-                    "content": "SELECT * FROM NF_FATURAMENTO_DEVOLUCOES WHERE movimento >= '2025-08-01'"
+                    "content": "SELECT TOP 10 * FROM NF_FATURAMENTO_DEVOLUCOES WHERE movimento >= '2025-08-01'",
+                    "options": {
+                        "if_exists": "replace"
+                    }
                 }
             ]
         },

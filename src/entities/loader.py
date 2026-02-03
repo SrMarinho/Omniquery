@@ -1,6 +1,7 @@
 import time
+import pandas as pd
 import yaml
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import List, Dict, Any, Optional
 from sqlalchemy.engine import create_engine, Engine
 from sqlalchemy import text
@@ -20,12 +21,10 @@ class Loader(BaseModel):
 
 class DatabaseLoader(Loader):
     type: str = "database"
-    connection_string: str = "duckdb:///:memory:"
-    engine: Engine = create_engine(connection_string)
+    database: str = "memory"
     
-    def _get_source_engine(self) -> Engine:
-        config = get_database_config(self.source)
-        print(config)
+    def get_engine(self, database: str) -> Engine:
+        config = get_database_config(database)
 
         connection_string: str = config["connection_string"]
 
@@ -34,17 +33,51 @@ class DatabaseLoader(Loader):
     def run(self) -> None:
         print(f"Running loads from source: {self.source}")
         try:
-            source_engine = self._get_source_engine()
+            source_engine = self.get_engine(self.source)
+            database_engine = self.get_engine(self.database)
         except Exception as e:
             print(e)
         else:
-            return
             for table in self.tables:
-                with self.engine.connect() as conn:
-                    result = conn.execute(text(table.content))
-                    
-                    while rows := result.fetchmany(1000):
-                        print(rows)
+                self._transfer_with_chunking(source_engine, database_engine, table)
+    
+    def _transfer_with_chunking(self, source_engine: Engine, to_engine: Engine, table: Table) -> None:
+        """Transfere dados em chunks para evitar sobrecarga de memória."""
+        
+        chunk_size = 50000
+        total_rows = 0
+        
+        first_chunk = True
+
+        query = table.content
+
+        for chunk_df in pd.read_sql(query, source_engine, chunksize=chunk_size):
+            print(f"Processing transfering data from {self.source} to application database")
+            
+            if first_chunk:
+                chunk_df.to_sql(
+                    name=table.alias,
+                    con=to_engine,
+                    if_exists=table.options.get("if_exists", "replace"),
+                    index=False,
+                    chunksize=chunk_size,
+                    method='multi'
+                )
+                first_chunk = False
+            else:
+                chunk_df.to_sql(
+                    name=table.alias,
+                    con=to_engine,
+                    if_exists='append',
+                    index=False,
+                    chunksize=chunk_size,
+                    method='multi'
+                )
+            
+            total_rows += len(chunk_df)
+            del chunk_df
+        
+        print(f"Completed transfer: {total_rows} total rows to {table.alias}")
 
 class FileLoader(Loader):
     type: str = "file"
@@ -52,7 +85,7 @@ class FileLoader(Loader):
     def run(self) -> None:
         print(f"Running loads from source: {self.source}")
         for table in self.tables:
-            table.run()
+            pass
 
 class LoaderFactory:
     loader_types = {

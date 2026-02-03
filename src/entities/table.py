@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional, List
+from typing import Optional, List, Dict
 from sqlalchemy.engine import Engine
 from src.types.table_types import TableTypes
 
@@ -9,14 +9,7 @@ class Table(BaseModel):
     type: TableTypes = Field(default=TableTypes.INLINE)
     content: str = Field(default="")
     columns: Optional[List] = Field(default=[])
-    destination: Optional[Engine] = None
+    options: Dict = Field(default_factory=dict)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    
-    def create(self):
-        if not self.destination:
-            raise ValueError("Empty destination")
-
-    def run(self) -> None:
-        print(f"Running table: {self.alias} of type {self.type.value}")
  
