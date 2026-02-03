@@ -1,3 +1,7 @@
 memory:
-  conection_string: "duckdb:///:memory:"
+  connection_string: "duckdb:///:memory:"
+
+procfit:
+  connection_string: "mssql+pyodbc://{{PROCFIT_DATABASE_USER}}:{{PROCFIT_DATABASE_PASSWORD}}@{{PROCFIT_DATABASE_HOST}}:{{PROCFIT_DATABASE_PORT}}/{{PROCFIT_DATABASE_NAME}}?driver=ODBC+Driver+17+for+SQL+Server"
+
   

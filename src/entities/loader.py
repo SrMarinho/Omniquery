@@ -23,20 +23,28 @@ class DatabaseLoader(Loader):
     connection_string: str = "duckdb:///:memory:"
     engine: Engine = create_engine(connection_string)
     
-    def get_source_engine(self) -> None:
-        get_database_config(self.source)
+    def _get_source_engine(self) -> Engine:
+        config = get_database_config(self.source)
+        print(config)
+
+        connection_string: str = config["connection_string"]
+
+        return create_engine(connection_string)
     
     def run(self) -> None:
         print(f"Running loads from source: {self.source}")
-        self.get_source_engine()
-        return
-
-        for table in self.tables:
-            with self.engine.connect() as conn:
-                result = conn.execute(text(table.content))
-                
-                while rows := result.fetchmany(1000):
-                    print(rows)
+        try:
+            source_engine = self._get_source_engine()
+        except Exception as e:
+            print(e)
+        else:
+            return
+            for table in self.tables:
+                with self.engine.connect() as conn:
+                    result = conn.execute(text(table.content))
+                    
+                    while rows := result.fetchmany(1000):
+                        print(rows)
 
 class FileLoader(Loader):
     type: str = "file"
