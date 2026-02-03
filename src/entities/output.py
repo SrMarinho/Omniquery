@@ -17,7 +17,7 @@ class Output(BaseModel):
 
 class DatabaseOutput(Output):
     type: str = "database" 
-    source_database: str = "memory"
+    source_database: str = "file"
     output_database: str = Field(default="postgresql")
     options: Dict = Field(default_factory=dict)
     
@@ -59,16 +59,9 @@ class DatabaseOutput(Output):
 
     def run(self) -> None:
         print(f"Writing in database {self.source_database}")
-        source_connection_string: str = get_database_config(self.source_database)["connection_string"]
-        source_engine = create_engine(source_connection_string)
-
         output_connection_string: str = get_database_config(self.output_database)["connection_string"]
         output_engine = create_engine(output_connection_string)
         self._transfer(memory_database, output_engine, self.name, self.query)
-
-        with memory_database.connect() as conn: 
-            result = conn.execute(text("show tables"))
-            print(result.fetchall())
 
 class FileOutput(Output):
     type: str = "file" 

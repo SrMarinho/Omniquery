@@ -10,6 +10,28 @@ class Pipeline(BaseModel):
     description: str = Field(default="")
     loads: List[Loader] = Field(default=[])
     outputs: List[Output] = Field(default=[])
+    
+    def _run_loads(self) -> None:
+        if self.name:
+            print(f"Running pipeline: {self.name}")
+        loads_theads = []
+        for load in self.loads:
+            t = Thread(target=load.run)
+            loads_theads.append(t)
+            t.start()
+
+        for thread in loads_theads:
+            thread.join()
+
+    def _run_outputs(self) -> None:
+        outputs_threads: List[Thread] = []
+        for output in self.outputs:
+            t = Thread(target=output.run)
+            outputs_threads.append(t)
+            t.start()
+        
+        for thread in outputs_threads:
+            thread.join()
 
     def run(self) -> None:
         for load in self.loads:

@@ -1,5 +1,5 @@
 memory:
-  connection_string: "duckdb:///:memory:"
+  connection_string: "duckdb:///:memory:?name=database"
 
 file:
   connection_string: "duckdb:///./temp_db.duckdb'"

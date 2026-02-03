@@ -22,7 +22,7 @@ class Loader(BaseModel):
 
 class DatabaseLoader(Loader):
     type: str = "database"
-    database: str = "memory"
+    database: str = "file"
     
     def get_engine(self, database: str) -> Engine:
         config = get_database_config(database)
@@ -35,7 +35,6 @@ class DatabaseLoader(Loader):
         print(f"Running loads from source: {self.source}")
         try:
             source_engine = self.get_engine(self.source)
-            database_engine = self.get_engine(self.database)
         except Exception as e:
             print(e)
         else:
