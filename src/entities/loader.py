@@ -21,7 +21,7 @@ class Loader(BaseModel):
 
 class DatabaseLoader(Loader):
     type: str = "database"
-    database: str = "memory"
+    database: str = "my_database"
     
     def get_engine(self, database: str) -> Engine:
         config = get_database_config(database)

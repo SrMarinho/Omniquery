@@ -1,8 +1,11 @@
 memory:
   connection_string: "duckdb:///:memory:"
 
-database:
-  connection_string: "postgresql://{{DATABASE_HOST}}:{{DATABASE_USER}}@{{DATABASE_PASSWORD}}:{{DATABASE_PORT}}/{{DATABASE_NAME}}"
+local:
+  connection_string: "duckdb:///data/database.duckdb"
+
+my_database:
+  connection_string: "postgresql://{{DATABASE_USER}}:{{DATABASE_PASSWORD}}@{{DATABASE_HOST}}:{{DATABASE_PORT}}/{{DATABASE_NAME}}"
 
 procfit:
   connection_string: "mssql+pyodbc://{{PROCFIT_DATABASE_USER}}:{{PROCFIT_DATABASE_PASSWORD}}@{{PROCFIT_DATABASE_HOST}}:{{PROCFIT_DATABASE_PORT}}/{{PROCFIT_DATABASE_NAME}}?driver=ODBC+Driver+17+for+SQL+Server"

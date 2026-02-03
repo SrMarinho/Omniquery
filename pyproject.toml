@@ -8,6 +8,7 @@ dependencies = [
     "duckdb-engine>=0.17.0",
     "openpyxl>=3.1.5",
     "pandas>=3.0.0",
+    "psycopg2>=2.9.11",
     "pydantic>=2.12.5",
     "pyodbc>=5.3.0",
     "python-dotenv>=1.2.1",
