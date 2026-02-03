@@ -42,9 +42,8 @@
     "outputs": [
         {
             "name": "vendas_consolidadas",
-            "query": "SELECT * FROM nf_faturamento LIMIT 10",
-            "type": "database",
-            "table": "fato_vendas"
+            "query": "select a.\"EMPRESA\", a.\"NF_FATURAMENTO\", 1 as tipo FROM nf_faturamento A union all select nfd2.\"EMPRESA\", nfd2.\"NF_FATURAMENTO_DEVOLUCAO\", 2 as tipo FROM nf_faturamento_devolucoes nfd2" ,
+            "type": "database"
         },
         {
             "name": "vendas_consolidadas.csv",

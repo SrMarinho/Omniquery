@@ -1,28 +1,81 @@
 from pydantic import BaseModel, Field, model_validator
 from typing import Dict, Any, Type
+import pandas as pd
+from sqlalchemy import text
+from sqlalchemy.engine import create_engine, Engine
 from src.types.file_output_format_types import FileOutputFormatTypes
+from src.utils.database_config_reader import get_database_config
+from src.config import memory_database
 
 class Output(BaseModel):
     type: str
+    name: str
     query: str
 
-    def write(self) -> None:
+    def run(self) -> None:
         print(f"Writing output type: {type(self)}")
 
 class DatabaseOutput(Output):
     type: str = "database" 
-    table: str
-    connection: str = Field(default="default")
+    source_database: str = "memory"
+    output_database: str = Field(default="postgresql")
+    options: Dict = Field(default_factory=dict)
+    
+    def _transfer(self, source_database: Engine, output_database: Engine, name: str, query: str) -> None:
+        """Transfere dados em chunks para evitar sobrecarga de memória."""
+        
+        chunk_size = 50000
+        total_rows = 0
+        
+        first_chunk = True
 
-    def write(self) -> None:
-        print("Writing in Database")
+        for chunk_df in pd.read_sql(query, source_database, chunksize=chunk_size):
+            print(f"Processing transfering data from {self.source_database} to application database")
+            
+            if first_chunk:
+                chunk_df.to_sql(
+                    name=name,
+                    con=output_database,
+                    if_exists=self.options.get("if_exists", "replace"),
+                    index=False,
+                    chunksize=chunk_size,
+                    method='multi'
+                )
+                first_chunk = False
+            else:
+                chunk_df.to_sql(
+                    name=name,
+                    con=output_database,
+                    if_exists='append',
+                    index=False,
+                    chunksize=chunk_size,
+                    method='multi'
+                )
+            
+            total_rows += len(chunk_df)
+            del chunk_df
+        
+        print(f"Completed transfer: {total_rows} total rows to {self.name}")
+
+    def run(self) -> None:
+        print(f"Writing in database {self.source_database}")
+        source_connection_string: str = get_database_config(self.source_database)["connection_string"]
+        source_engine = create_engine(source_connection_string)
+
+        output_connection_string: str = get_database_config(self.output_database)["connection_string"]
+        output_engine = create_engine(output_connection_string)
+        self._transfer(memory_database, output_engine, self.name, self.query)
+
+        with memory_database.connect() as conn: 
+            result = conn.execute(text("show tables"))
+            print(result.fetchall())
 
 class FileOutput(Output):
     type: str = "file" 
     file_path: str = Field(default="")
     format: FileOutputFormatTypes = FileOutputFormatTypes.CSV
 
-    def write(self) -> None:
+    def run(self) -> None:
         print("Writing in File")
 
 class APIOutput(Output):
@@ -31,7 +84,7 @@ class APIOutput(Output):
     method: str = Field(default="POST")
     options: dict = {}
 
-    def write(self) -> None:
+    def run(self) -> None:
         print("Writing in API")
 
 class OutputFactory:

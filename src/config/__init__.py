@@ -1,3 +1,3 @@
-from .database import databases
+from .database import memory_database
 
-__all__ = ["databases"]
+__all__ = ["memory_database"]

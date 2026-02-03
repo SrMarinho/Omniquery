@@ -8,8 +8,6 @@ class Table(BaseModel):
     description: str = Field(default="")
     type: TableTypes = Field(default=TableTypes.INLINE)
     content: str = Field(default="")
-    columns: Optional[List] = Field(default=[])
     options: Dict = Field(default_factory=dict)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
- 

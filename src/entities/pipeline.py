@@ -10,33 +10,14 @@ class Pipeline(BaseModel):
     description: str = Field(default="")
     loads: List[Loader] = Field(default=[])
     outputs: List[Output] = Field(default=[])
-    
-    def _run_loads(self) -> None:
-        if self.name:
-            print(f"Running pipeline: {self.name}")
-        loads_theads = []
-        for load in self.loads:
-            t = Thread(target=load.run)
-            loads_theads.append(t)
-            t.start()
-
-        for thread in loads_theads:
-            thread.join()
-
-    def _run_outputs(self) -> None:
-        outputs_threads: List[Thread] = []
-        for output in self.outputs:
-            t = Thread(target=output.write)
-            outputs_threads.append(t)
-            t.start()
-        
-        for thread in outputs_threads:
-            thread.join()
 
     def run(self) -> None:
-        self._run_loads()
-        self._run_outputs()
+        for load in self.loads:
+            load.run()
         
+        for output in self.outputs:
+            output.run()
+
     @model_validator(mode='before')
     @classmethod
     def create_concrete_loaders(cls, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -53,8 +34,6 @@ class Pipeline(BaseModel):
                 else:
                     raise ValueError(f"Tipo inválido para output: {type(loader_data)}")
 
-            print(concrete_loaders)
-            
             data['loads'] = concrete_loaders
         
         return data

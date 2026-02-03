@@ -7,6 +7,7 @@ from sqlalchemy.engine import create_engine, Engine
 from sqlalchemy import text
 from src.entities.table import Table
 from src.utils.database_config_reader import get_database_config
+from src.config import memory_database
 
 
 class Loader(BaseModel):
@@ -21,7 +22,7 @@ class Loader(BaseModel):
 
 class DatabaseLoader(Loader):
     type: str = "database"
-    database: str = "my_database"
+    database: str = "memory"
     
     def get_engine(self, database: str) -> Engine:
         config = get_database_config(database)
@@ -39,9 +40,9 @@ class DatabaseLoader(Loader):
             print(e)
         else:
             for table in self.tables:
-                self._transfer_with_chunking(source_engine, database_engine, table)
+                self._transfer(source_engine, memory_database, table)
     
-    def _transfer_with_chunking(self, source_engine: Engine, to_engine: Engine, table: Table) -> None:
+    def _transfer(self, source_engine: Engine, to_engine: Engine, table: Table) -> None:
         """Transfere dados em chunks para evitar sobrecarga de memória."""
         
         chunk_size = 50000

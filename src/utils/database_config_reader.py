@@ -5,7 +5,6 @@ import re
 import yaml
 from src.config.settings import base_path
 
-@lru_cache(maxsize=4)
 def get_database_config(database: str) -> dict:
     """
     Get database configuration from 'databases.yaml' in root path

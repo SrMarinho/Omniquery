@@ -1,10 +1,10 @@
 memory:
   connection_string: "duckdb:///:memory:"
 
-local:
-  connection_string: "duckdb:///data/database.duckdb"
+file:
+  connection_string: "duckdb:///./temp_db.duckdb'"
 
-my_database:
+postgresql:
   connection_string: "postgresql://{{DATABASE_USER}}:{{DATABASE_PASSWORD}}@{{DATABASE_HOST}}:{{DATABASE_PORT}}/{{DATABASE_NAME}}"
 
 procfit:
