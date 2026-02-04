@@ -22,7 +22,7 @@ class Loader(BaseModel):
 
 class DatabaseLoader(Loader):
     type: str = "database"
-    database: str = "file"
+    database: str = "memory"
     
     def get_engine(self, database: str) -> Engine:
         config = get_database_config(database)
@@ -52,7 +52,9 @@ class DatabaseLoader(Loader):
         query = table.content
 
         for chunk_df in pd.read_sql(query, source_engine, chunksize=chunk_size):
-            print(f"Processing transfering data from {self.source} to application database")
+            print(f"Processing transfering data from {self.source} to application database table: {table.alias}")
+
+            chunk_df.columns = chunk_df.columns.str.lower()
             
             if first_chunk:
                 chunk_df.to_sql(

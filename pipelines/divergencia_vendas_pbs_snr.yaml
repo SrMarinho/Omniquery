@@ -1,0 +1,42 @@
+name: divergencia_vendas_pbs_snr
+description: Pipeline para processar divergências de vendas entre PBS e Senior
+loads:
+  - type: database
+    source: procfit
+    tables:
+      - alias: nf_faturamento
+        description: Consulta de faturamento do PBS
+        type: inline
+        content: SELECT TOP 100 * FROM nf_faturamento WHERE movimento >= '2025-08-01'
+        options:
+          if_exists: replace
+      - alias: nf_faturamento_devolucoes
+        description: Consulta de devoluções de faturamento do PBS
+        type: inline
+        content: SELECT TOP 100 * FROM NF_FATURAMENTO_DEVOLUCOES WHERE movimento >= '2025-08-01'
+        options:
+          if_exists: replace
+  - type: database
+    source: senior
+    tables:
+      - alias: clientes
+        description: Consulta de clientes da Senior
+        type: inline
+        content: SELECT * FROM clientes
+outputs:
+  - name: vendas_consolidadas
+    query: |
+      select a.empresa, a.nf_faturamento, 1 as tipo 
+      FROM nf_faturamento A 
+      union all 
+      select nfd2.empresa, nfd2.nf_faturamento_devolucao, 2 as tipo 
+      FROM nf_faturamento_devolucoes nfd2
+    type: database
+  - name: outputs/vendas_consolidadas.csv
+    query: |
+      select a.empresa, a.nf_faturamento, 1 as tipo 
+      FROM nf_faturamento A 
+      union all 
+      select nfd2.empresa, nfd2.nf_faturamento_devolucao, 2 as tipo 
+      FROM nf_faturamento_devolucoes nfd2
+    type: file

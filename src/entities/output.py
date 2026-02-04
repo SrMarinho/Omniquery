@@ -1,3 +1,4 @@
+from pathlib import Path
 from pydantic import BaseModel, Field, model_validator
 from typing import Dict, Any, Type
 import pandas as pd
@@ -11,15 +12,15 @@ class Output(BaseModel):
     type: str
     name: str
     query: str
+    options: Dict = Field(default_factory=dict)
 
     def run(self) -> None:
         print(f"Writing output type: {type(self)}")
 
 class DatabaseOutput(Output):
     type: str = "database" 
-    source_database: str = "file"
+    source_database: str = "memory"
     output_database: str = Field(default="postgresql")
-    options: Dict = Field(default_factory=dict)
     
     def _transfer(self, source_database: Engine, output_database: Engine, name: str, query: str) -> None:
         """Transfere dados em chunks para evitar sobrecarga de memória."""
@@ -30,8 +31,10 @@ class DatabaseOutput(Output):
         first_chunk = True
 
         for chunk_df in pd.read_sql(query, source_database, chunksize=chunk_size):
-            print(f"Processing transfering data from {self.source_database} to application database")
+            print(f"Processing transfering data from {self.source_database} to application database table: {name}")
             
+            chunk_df.columns = chunk_df.columns.str.lower()
+
             if first_chunk:
                 chunk_df.to_sql(
                     name=name,
@@ -65,17 +68,39 @@ class DatabaseOutput(Output):
 
 class FileOutput(Output):
     type: str = "file" 
-    file_path: str = Field(default="")
-    format: FileOutputFormatTypes = FileOutputFormatTypes.CSV
+
+    def _transfer(self, source_engine: Engine, file_path: str, query: str) -> None:
+        filepath = Path(file_path)
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        
+        chunk_size = 50000
+        total_rows = 0
+        
+        first_chunk = True
+
+        for chunk_df in pd.read_sql(query, source_engine, chunksize=chunk_size):
+            print(f"Processing transfering data to file: {file_path}")
+            
+            chunk_df.columns = chunk_df.columns.str.lower()
+
+            if first_chunk:
+                chunk_df.to_csv(file_path, index=False)
+                first_chunk = False
+            else:
+                chunk_df.to_csv(file_path, mode="a", index=False)
+            total_rows += len(chunk_df)
+            del chunk_df
+
 
     def run(self) -> None:
-        print("Writing in File")
+        print(f"Writing in file: {self.name}")
+        self._transfer(memory_database, self.name, self.query)
+
 
 class APIOutput(Output):
     type: str = "api" 
     endpoint: str = Field(default="")
     method: str = Field(default="POST")
-    options: dict = {}
 
     def run(self) -> None:
         print("Writing in API")
