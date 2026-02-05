@@ -39,6 +39,7 @@ class DatabaseLoader(Loader):
             print(e)
         else:
             for table in self.tables:
+                print(table.content)
                 self._transfer(source_engine, memory_database, table)
     
     def _transfer(self, source_engine: Engine, to_engine: Engine, table: Table) -> None:

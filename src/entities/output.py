@@ -96,20 +96,10 @@ class FileOutput(Output):
         print(f"Writing in file: {self.name}")
         self._transfer(memory_database, self.name, self.query)
 
-
-class APIOutput(Output):
-    type: str = "api" 
-    endpoint: str = Field(default="")
-    method: str = Field(default="POST")
-
-    def run(self) -> None:
-        print("Writing in API")
-
 class OutputFactory:
     output_types = {
         "database": DatabaseOutput,
         "file": FileOutput,
-        "api": APIOutput
     }
     @staticmethod
     def create(config: Dict[str, Any]) -> Output:

@@ -1,0 +1,88 @@
+name: clientes_datas
+loads:
+  - type: database
+    source: procfit
+    tables:
+      - alias: clientes_datas
+        description: Consulta clientes
+        type: inline
+        content: |
+          set nocount on;
+          IF OBJECT_ID('tempdb..#TEMP_PV_PARAMETROS_ENTIDADES') IS NOT NULL DROP TABLE #TEMP_PV_PARAMETROS_ENTIDADES;
+          SELECT A.ENTIDADE,
+                A.NOME,
+                B.CLIENTE_REDE AS REDE,
+                G.DESCRICAO AS DESCRICAO_REDE,
+                C.EMPRESA_USUARIA_FATURAMENTO,
+                C.VENDEDOR AS SETOR,
+                H.NOME AS NOME_SETOR,
+                D.LIMITE_TOTAL,
+                E.DATA_LIMITE_COMPRA,
+                F.DATA_ULTIMA_COMPRA,
+                E.VALIDADE_ALVARA_SANITARIO,
+                E.VALIDADE_PSICOTROPICO_344,
+                E.VALIDADE_PSICOTROPIDO_D1,
+                E.VALIDADE_PSICOTROPICO_C2,
+                E.DATA_PUBLICACAO_AFE,
+                B.PEDIDO_VENDA_PARAMETRO_ENTIDADE AS REGISTO_CONFIGURACAO
+              INTO #TEMP_PV_PARAMETROS_ENTIDADES
+              FROM PESSOAS_JURIDICAS                                  A
+              JOIN PEDIDOS_VENDAS_PARAMETROS_ENTIDADES                B ON B.ENTIDADE = A.ENTIDADE
+              JOIN PEDIDOS_VENDAS_PARAMETROS_ENTIDADES_CDS            C ON C.PEDIDO_VENDA_PARAMETRO_ENTIDADE = B.PEDIDO_VENDA_PARAMETRO_ENTIDADE
+              JOIN PEDIDOS_VENDAS_PARAMETROS_ENTIDADES_AC_MANUTENCOES D ON D.PEDIDO_VENDA_PARAMETRO_ENTIDADE = B.PEDIDO_VENDA_PARAMETRO_ENTIDADE
+              JOIN PEDIDOS_VENDAS_PARAMETROS_ENTIDADES_DOCUMENTACOES  E ON E.PEDIDO_VENDA_PARAMETRO_ENTIDADE = B.PEDIDO_VENDA_PARAMETRO_ENTIDADE
+              JOIN B2B_ENTIDADES                                      F ON F.ENTIDADE = A.ENTIDADE
+              JOIN VENDEDORES                                         H ON H.VENDEDOR = C.VENDEDOR
+              LEFT
+              JOIN CLIENTES_REDES                                     G ON G.CLIENTE_REDE = B.CLIENTE_REDE
+                  WHERE B.GRUPO_CLIENTE NOT IN (112)
+                    AND C.VENDEDOR NOT IN(89001, 49000, 7080, 37001, 50725, 1350, 906, 1864, 69043, 79014, 97330);
+
+          IF OBJECT_ID('tempdb..#TEMP_PV_PARAMETROS_ENTIDADES_SALDOS') IS NOT NULL DROP TABLE #TEMP_PV_PARAMETROS_ENTIDADES_SALDOS;
+          SELECT A.*,
+                SUM(C.SALDO) AS SALDO_DEVEDOR,
+                SUM(IIF(DATEDIFF(day, B.VENCIMENTO, GETDATE()) <= 10, NULL, C.SALDO)) AS VENCIMENTO_10_DIAS_ATRASO
+              INTO #TEMP_PV_PARAMETROS_ENTIDADES_SALDOS
+              FROM #TEMP_PV_PARAMETROS_ENTIDADES A
+              JOIN TITULOS_RECEBER               B ON B.ENTIDADE       = A.ENTIDADE
+                                                  AND B.EMPRESA        = A.EMPRESA_USUARIA_FATURAMENTO
+              JOIN TITULOS_RECEBER_SALDO         C ON C.TITULO_RECEBER = B.TITULO_RECEBER
+                  WHERE C.SITUACAO_TITULO = 1
+                  GROUP BY A.ENTIDADE,
+                          A.NOME,
+                          A.REDE,
+                          A.DESCRICAO_REDE,
+                          A.EMPRESA_USUARIA_FATURAMENTO,
+                          A.SETOR,
+                          A.NOME_SETOR,
+                          A.LIMITE_TOTAL,
+                          A.DATA_LIMITE_COMPRA,
+                          A.DATA_ULTIMA_COMPRA,
+                          A.VALIDADE_ALVARA_SANITARIO,
+                          A.VALIDADE_PSICOTROPICO_344,
+                          A.VALIDADE_PSICOTROPIDO_D1,
+                          A.VALIDADE_PSICOTROPICO_C2,
+                          A.DATA_PUBLICACAO_AFE,
+                          A.REGISTO_CONFIGURACAO
+
+          SELECT A.*,
+                C.CLASSIF_ENTIDADE AS CLASSIFICACAO,
+                C.DESCRICAO AS DESCRICAO_CLASSIFICACAO,
+                D.TIPO_RESTRICAO,
+                E.GRUPO_PRODUTO,
+                E.DESCRICAO AS DESCRICAO_GRUPO_PRODUTO
+              FROM #TEMP_PV_PARAMETROS_ENTIDADES_SALDOS A
+              JOIN CLASSIFICACOES                       B ON B.ENTIDADE = A.ENTIDADE
+              JOIN CLASSIF_ENTIDADES                    C ON C.CLASSIF_ENTIDADE = B.CLASSIFICACAO
+              LEFT
+              JOIN PEDIDOS_VENDAS_PARAMETROS_ENTIDADES_GRUPOS_PRODUTO D ON D.PEDIDO_VENDA_PARAMETRO_ENTIDADE = A.REGISTO_CONFIGURACAO
+              LEFT
+              JOIN GRUPOS_PRODUTOS                       E ON E.GRUPO_PRODUTO = D.GRUPO_PRODUTO;
+          --         WHERE A.VALIDADE_ALVARA_SANITARIO = '20/12/2025'
+        options:
+          if_exists: replace
+outputs:
+  - name: clientes_datas
+    query: |
+      select * from clientes_datas
+    type: database
