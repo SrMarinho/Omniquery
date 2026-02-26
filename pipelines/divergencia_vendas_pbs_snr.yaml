@@ -90,7 +90,7 @@ outputs:
                                   AND B.CODFIL = A.FILIAL_SENIOR
                                   AND B.NUMNFV = A.NOTA_FISCAL
                                   AND B.DATEMI = A.DATA_EMISSAO
-      WHERE B.NUMNFV IS NULL
+      -- WHERE B.NUMNFV IS NULL
   - name: outputs/diferenca_faturamento_devolucoes.csv
     type: file
     query: |
@@ -102,4 +102,4 @@ outputs:
                                   AND B.CODFIL = A.FILIAL_SENIOR
                                   AND B.NUMNFV = A.NOTA_FISCAL
                                   AND B.DATEMI = A.DATA_EMISSAO
-      WHERE B.NUMNFV IS NULL
+      -- WHERE B.NUMNFV IS NULL
