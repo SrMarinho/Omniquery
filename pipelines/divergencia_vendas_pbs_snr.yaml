@@ -30,7 +30,7 @@ loads:
               WHERE D.BASE_ORIGEM = 1
                 AND F.STATUS = 4
                 AND CAST(A.EMISSAO AS DATE) >= '01/05/2025'
-                AND CAST(A.EMISSAO AS DATE) < '01/12/2025'
+                AND CAST(A.EMISSAO AS DATE) < '01/06/2025'
         options:
           if_exists: replace
       - alias: nf_faturamento_devolucoes
