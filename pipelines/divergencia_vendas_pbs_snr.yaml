@@ -79,7 +79,7 @@ loads:
             AND DATEMI >= TO_DATE('2025-05-01', 'YYYY-MM-DD')
             AND DATEMI < TO_DATE('2025-06-01', 'YYYY-MM-DD')
 outputs:
-  - name: outputs/vendas_consolidadas.csv
+  - name: outputs/diferenca_faturamento.csv
     type: file
     query: |
       SELECT 
@@ -90,4 +90,16 @@ outputs:
                                   AND B.CODFIL = A.FILIAL_SENIOR
                                   AND B.NUMNFV = A.NOTA_FISCAL
                                   AND B.DATEMI = A.DATA_EMISSAO
-      -- WHERE B.NUMNFV IS NULL
+      WHERE B.NUMNFV IS NULL
+  - name: outputs/diferenca_faturamento_devolucoes.csv
+    type: file
+    query: |
+      SELECT 
+        A.*
+      FROM 
+        nf_faturamento_devolucoes A
+        LEFT JOIN vendas_senior B ON B.CODEMP = A.CODIGO_INTEGRACAO
+                                  AND B.CODFIL = A.FILIAL_SENIOR
+                                  AND B.NUMNFV = A.NOTA_FISCAL
+                                  AND B.DATEMI = A.DATA_EMISSAO
+      WHERE B.NUMNFV IS NULL
