@@ -1,0 +1,15 @@
+name: senior_connection_test
+description: Pipeline para testar conexão com o Senior
+loads:
+  - type: database
+    source: senior
+    tables:
+      - alias: clientes
+        description: Consulta de clientes da Senior
+        type: inline
+        content: SELECT * FROM SAPIENS_PROD.E070FIL OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY
+outputs:
+  - name: outputs/teste.csv
+    query: |
+      SELECT * from clientes
+    type: file

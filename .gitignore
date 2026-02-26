@@ -22,3 +22,6 @@ wheels/
 *.db
 *.sqlite3
 *.duckdb
+
+
+outputs/
