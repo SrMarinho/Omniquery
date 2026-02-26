@@ -44,7 +44,7 @@ class DatabaseLoader(Loader):
     
     def _transfer(self, source_engine: Engine, to_engine: DuckDBPyConnection, table: Table) -> None:
         """Transfere dados de um engine SQLAlchemy para DuckDB."""
-        to_engine.execute("PRAGMA threads=8")
+        to_engine.execute("PRAGMA threads=4")
         to_engine.execute("PRAGMA memory_limit='4GB'")
 
         total_rows = 0
