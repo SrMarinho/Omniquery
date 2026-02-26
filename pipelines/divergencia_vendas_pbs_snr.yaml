@@ -7,36 +7,87 @@ loads:
       - alias: nf_faturamento
         description: Consulta de faturamento do PBS
         type: inline
-        content: SELECT TOP 100 * FROM nf_faturamento WHERE movimento >= '2025-08-01'
+        content: |
+          SELECT A.EMPRESA        AS unidade,
+            C.NOME_FANTASIA  AS nome,
+            D.EMPRESA        AS codigo_integracao,
+            D.CODIGO         AS filial_senior,
+            A.ENTIDADE       AS codigo_cliente,
+            A.NF_NUMERO      AS nota_fiscal,
+            A.EMISSAO        AS data_emissao,
+            A.EMISSAO_NFE    AS data_autorizacao,
+            A.CHAVE_NFE      AS chave_nfe,
+            B.TOTAL_PRODUTOS AS total_produtos,
+            B.TOTAL_GERAL    AS total_liquido
+          FROM NF_FATURAMENTO                                A WITH(NOLOCK)
+          JOIN NF_FATURAMENTO_TOTAIS                         B WITH(NOLOCK) ON B.NF_FATURAMENTO  = A.NF_FATURAMENTO
+          JOIN EMPRESAS_USUARIAS                             C WITH(NOLOCK) ON C.EMPRESA_USUARIA = A.EMPRESA
+          JOIN EMPRESAS_DEPARA                               D WITH(NOLOCK) ON D.EMPRESA_USUARIA = A.EMPRESA
+          JOIN NFE_CABECALHO                                 F WITH(NOLOCK) ON F.EMPRESA         = A.EMPRESA
+                                                                          AND F.XML_mod_B06     = 55
+                                                                          AND F.XML_serie_B07   = A.NF_SERIE
+                                                                          AND F.XML_nNF_B08     = A.NF_NUMERO
+              WHERE D.BASE_ORIGEM = 1
+                AND F.STATUS = 4
+                AND CAST(A.EMISSAO AS DATE) >= '01/05/2025'
+                AND CAST(A.EMISSAO AS DATE) < '01/12/2025'
         options:
           if_exists: replace
       - alias: nf_faturamento_devolucoes
         description: Consulta de devoluções de faturamento do PBS
         type: inline
-        content: SELECT TOP 100 * FROM NF_FATURAMENTO_DEVOLUCOES WHERE movimento >= '2025-08-01'
+        content: |
+          SELECT A.EMPRESA        AS unidade,
+            C.NOME_FANTASIA  AS nome,
+            D.EMPRESA        AS codigo_integracao,
+            D.CODIGO         AS filial_senior,
+            A.ENTIDADE       AS codigo_emitente,
+            ISNULL(NF_NUMERO_CLIENTE,A.NF_NUMERO) AS nota_fiscal,
+            A.EMISSAO        AS data_emissao,
+            A.MOVIMENTO      AS data_movimento_contabil,
+            A.DATA_HORA      AS ultima_nota_mdlog,
+            A.CHAVE_NFE      AS chave_nfe,
+            B.TOTAL_PRODUTOS AS total_produtos,
+            B.TOTAL_GERAL    AS total_liquido
+          FROM NF_FATURAMENTO_DEVOLUCOES                 A WITH(NOLOCK)
+          JOIN NF_FATURAMENTO_DEVOLUCOES_TOTAIS          B WITH(NOLOCK) ON B.NF_FATURAMENTO_DEVOLUCAO = A.NF_FATURAMENTO_DEVOLUCAO
+          JOIN EMPRESAS_USUARIAS                         C WITH(NOLOCK) ON C.EMPRESA_USUARIA          = A.EMPRESA
+          JOIN EMPRESAS_DEPARA                           D WITH(NOLOCK) ON D.EMPRESA_USUARIA          = A.EMPRESA
+              WHERE A.PROCESSAR = 'S'
+                AND CAST(A.EMISSAO AS DATE) >= '01/05/2025'
+                AND CAST(A.EMISSAO AS DATE) < '01/06/2025'
         options:
           if_exists: replace
   - type: database
     source: senior
     tables:
-      - alias: clientes
-        description: Consulta de clientes da Senior
+      - alias: vendas_senior
+        description: Consulta de vendas da Senior
         type: inline
-        content: SELECT * FROM clientes
+        content: |
+          SELECT CODEMP,
+              CODFIL,
+              DATEMI,
+              NUMNFV,
+              VLRBPR,
+              DATGER,
+              VLRLIQ
+          FROM E140NFV A
+          WHERE 
+            CODEMP = 2
+            -- AND CODFIL IN(1,2,3,4,5,6,7,9,10,11,12,13,14,15,16)
+            AND DATEMI >= TO_DATE('2025-05-01', 'YYYY-MM-DD')
+            AND DATEMI < TO_DATE('2025-06-01', 'YYYY-MM-DD')
 outputs:
-  - name: vendas_consolidadas
-    query: |
-      select a.empresa, a.nf_faturamento, 1 as tipo 
-      FROM nf_faturamento A 
-      union all 
-      select nfd2.empresa, nfd2.nf_faturamento_devolucao, 2 as tipo 
-      FROM nf_faturamento_devolucoes nfd2
-    type: database
   - name: outputs/vendas_consolidadas.csv
-    query: |
-      select a.empresa, a.nf_faturamento, 1 as tipo 
-      FROM nf_faturamento A 
-      union all 
-      select nfd2.empresa, nfd2.nf_faturamento_devolucao, 2 as tipo 
-      FROM nf_faturamento_devolucoes nfd2
     type: file
+    query: |
+      SELECT 
+        A.*
+      FROM 
+        nf_faturamento A
+        LEFT JOIN vendas_senior B ON B.CODEMP = A.CODIGO_INTEGRACAO
+                                  AND B.CODFIL = A.FILIAL_SENIOR
+                                  AND B.NUMNFV = A.NOTA_FISCAL
+                                  AND B.DATEMI = A.DATA_EMISSAO
+      -- WHERE B.NUMNFV IS NULL

@@ -1,5 +1,6 @@
 import yaml
 from src.entities.pipeline import Pipeline
+from src.config import memory_database
 
 class App:
     def __init__(self, **kwargs) -> None:
@@ -20,3 +21,4 @@ class App:
     def run(self) -> None:
         print("App is running")
         self.pipeline.run()
+        memory_database.close()

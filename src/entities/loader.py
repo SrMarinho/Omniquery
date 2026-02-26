@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import List, Dict, Any, Optional
 from sqlalchemy.engine import create_engine, Engine
 from sqlalchemy import text
+from duckdb import DuckDBPyConnection
 from src.entities.table import Table
 from src.utils.database_config_reader import get_database_config
 from src.config import memory_database
@@ -39,48 +40,61 @@ class DatabaseLoader(Loader):
             print(e)
         else:
             for table in self.tables:
-                print(table.content)
                 self._transfer(source_engine, memory_database, table)
     
-    def _transfer(self, source_engine: Engine, to_engine: Engine, table: Table) -> None:
-        """Transfere dados em chunks para evitar sobrecarga de memória."""
-        
-        chunk_size = 50000
+    def _transfer(self, source_engine: Engine, to_engine: DuckDBPyConnection, table: Table) -> None:
+        """Transfere dados de um engine SQLAlchemy para DuckDB."""
+        to_engine.execute("PRAGMA threads=8")
+        to_engine.execute("PRAGMA memory_limit='4GB'")
+
         total_rows = 0
+        start_time = time.time()
+
         
-        first_chunk = True
-
-        query = table.content
-
-        for chunk_df in pd.read_sql(query, source_engine, chunksize=chunk_size):
-            print(f"Processing transfering data from {self.source} to application database table: {table.alias}")
-
-            chunk_df.columns = chunk_df.columns.str.lower()
-            
-            if first_chunk:
-                chunk_df.to_sql(
-                    name=table.alias,
-                    con=to_engine,
-                    if_exists=table.options.get("if_exists", "replace"),
-                    index=False,
-                    chunksize=chunk_size,
-                    method='multi'
-                )
-                first_chunk = False
-            else:
-                chunk_df.to_sql(
-                    name=table.alias,
-                    con=to_engine,
-                    if_exists='append',
-                    index=False,
-                    chunksize=chunk_size,
-                    method='multi'
-                )
-            
-            total_rows += len(chunk_df)
-            del chunk_df
+        print(f"Transfering data from {self.source} to DuckDB table: {table.alias}")
         
-        print(f"Completed transfer: {total_rows} total rows to {table.alias}")
+        duck_conn = to_engine
+        try:
+            query = table.content
+            chunk_size = 100000
+            
+            first_chunk = True
+            
+            for chunk_df in pd.read_sql(query, source_engine, chunksize=chunk_size):
+                chunk_start = time.time()
+                
+                chunk_df.columns = chunk_df.columns.str.lower()
+                chunk_rows = len(chunk_df)
+                
+                if duck_conn:
+                    duck_conn.register('temp_df', chunk_df)
+                    
+                    if first_chunk:
+                        duck_conn.execute(f"""
+                            CREATE OR REPLACE TABLE {table.alias} AS 
+                            SELECT * FROM temp_df
+                        """)
+                        first_chunk = False
+                    else:
+                        duck_conn.execute(f"""
+                            INSERT INTO {table.alias} 
+                            SELECT * FROM temp_df
+                        """)
+                    
+                    duck_conn.unregister('temp_df')
+                
+                chunk_time = time.time() - chunk_start
+                total_rows += chunk_rows
+                
+                print(f"  → Lote de {chunk_rows:,} linhas")
+                
+                del chunk_df
+            
+            total_time = time.time() - start_time
+            print(f"✅ Completed transfer: {total_rows} total rows to {table.alias} "
+                f"em {total_time:.2f}s (média: {total_rows/total_time:.0f} linhas/s)\n")
+        except Exception as e:
+            print(f"❌ Erro ao transferir dados para {table.alias}: {e}")
 
 class FileLoader(Loader):
     type: str = "file"
