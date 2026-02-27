@@ -127,7 +127,6 @@ class DatabaseOutput(Output):
         print("─" * 60)
         print(f"🚀 Starting job: {self.name}")
         print(f"📋 Target: {self.output_database} › Table: {self.name}")
-        print(f"🔍 Query: {self.query[:100]}{'...' if len(self.query) > 100 else ''}")
         print("─" * 60)
         
         try:
