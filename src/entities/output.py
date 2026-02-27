@@ -32,9 +32,6 @@ class DatabaseOutput(Output):
         """
         Transfere dados do DuckDB para PostgreSQL de forma simples.
         """
-        import io
-        import time
-        
         # Tempo de configuração
         config_start = time.time()
         conn = output_database.raw_connection()
@@ -96,7 +93,7 @@ class DatabaseOutput(Output):
             total_time = time.time() - config_start
             
             total_rows = len(rows)
-            avg_speed = total_rows / transfer_time
+            avg_speed = total_rows / transfer_time if transfer_time > 0 else 0
             data_size_mb = data_size / (1024 * 1024)
             speed_mb_s = data_size_mb / transfer_time if transfer_time > 0 else 0
             
