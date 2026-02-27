@@ -166,10 +166,21 @@ class DatabaseLoader(Loader):
 class FileLoader(Loader):
     type: str = "file"
 
+    def _transfer(self, source: str, to_engine: DuckDBPyConnection, table: Table) -> None:
+        """Transfers data from a file to DuckDB."""
+        df = pd.read_csv(source)
+        df.columns = df.columns.str.lower()
+        to_engine.register('temp_df', df)
+        to_engine.execute(f"""
+            CREATE OR REPLACE TABLE {table.alias} AS 
+            SELECT * FROM temp_df
+        """)
+        to_engine.unregister('temp_df')
+
     def run(self) -> None:
         print(f"Running loads from source: {self.source}")
         for table in self.tables:
-            pass
+            self._transfer(self.source, memory_database, table)
 
 class LoaderFactory:
     loader_types = {
