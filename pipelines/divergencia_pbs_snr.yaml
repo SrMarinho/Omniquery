@@ -149,7 +149,7 @@ loads:
             AND DATENT >= TO_DATE('2025-05-01', 'YYYY-MM-DD')
             AND DATENT < TO_DATE('2025-06-01', 'YYYY-MM-DD')
 outputs:
-  - name: divergencia_faturamento
+  - name: divergencia_saidas
     type: database
     query: |
       SELECT 
@@ -160,28 +160,40 @@ outputs:
                                   AND B.CODFIL = A.FILIAL_SENIOR
                                   AND B.NUMNFV = A.NOTA_FISCAL
                                   AND B.DATEMI = A.DATA_EMISSAO
-      -- WHERE B.NUMNFV IS NULL
+      WHERE B.NUMNFV IS NULL
 
       union all
 
       SELECT 
         A.*, B.*
       FROM 
-        nf_faturamento A
-        LEFT JOIN vendas_senior B ON B.CODEMP = A.CODIGO_INTEGRACAO
-                                  AND B.CODFIL = A.FILIAL_SENIOR
-                                  AND B.NUMNFV = A.NOTA_FISCAL
-                                  AND B.DATEMI = A.DATA_EMISSAO
-      -- WHERE B.NUMNFV IS NULL      
-  - name: divergencia_faturamento_devolucoes
+        nf_compra_devolucoes A
+        LEFT JOIN vendas_senior B ON B.CODEMP = A.codigo_integracao
+                                  AND B.CODFIL = A.filial_senior
+                                  AND B.NUMNFV = A.nota_fiscal
+                                  AND B.DATEMI = A.data_emissao
+      WHERE B.NUMNFV IS NULL      
+  - name: divergencia_entradas
     type: database
     query: |
       SELECT 
         A.*, B.*
       FROM 
+        nf_compra A
+        LEFT JOIN compras_senior B ON B.CODEMP = A.codigo_integracao
+                                  AND B.CODFIL = A.filial_senior
+                                  AND B.NUMNFC = A.nota_fiscal
+                                  AND B.DATENT = A.data_movimento_contabil
+      WHERE B.NUMNFC IS NULL
+
+      union all
+
+      SELECT 
+        A.*, B.*
+      FROM 
         nf_faturamento_devolucoes A
-        LEFT JOIN vendas_senior B ON B.CODEMP = A.CODIGO_INTEGRACAO
-                                  AND B.CODFIL = A.FILIAL_SENIOR
-                                  AND B.NUMNFV = A.NOTA_FISCAL
-                                  AND B.DATEMI = A.DATA_EMISSAO
-      -- WHERE B.NUMNFV IS NULL
+        LEFT JOIN compras_senior B ON B.CODEMP = A.codigo_integracao
+                                  AND B.CODFIL = A.filial_senior
+                                  AND B.NUMNFC = A.nota_fiscal
+                                  AND B.DATENT = A.data_movimento_contabil
+      WHERE B.NUMNFC IS NULL
