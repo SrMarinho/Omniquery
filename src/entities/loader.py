@@ -137,16 +137,16 @@ class DatabaseLoader(Loader):
                 chunk_time = time.time() - chunk_start
                 total_rows += chunk_rows
                 
-                speed = chunk_rows / chunk_time
+                speed = chunk_rows / chunk_time if chunk_time > 0 else 0
                 print(f"  Batch #{i:2d} {operation:12s} : {chunk_rows:10,} rows "
                     f"⏱️  {chunk_time:5.2f}s")
                 
                 del chunk_df
             
             transfer_time = time.time() - transfer_start
-            total_time = time.time() - config_start  # Tempo total desde o início
+            total_time = time.time() - config_start
             
-            avg_speed = total_rows / transfer_time
+            avg_speed = total_rows / transfer_time if transfer_time > 0 else 0
             
             print("─" * 60)
             print(f"✅ Transfer completed successfully!")
