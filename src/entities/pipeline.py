@@ -36,9 +36,11 @@ class Pipeline(BaseModel):
     def run(self) -> None:
         for load in self.loads:
             load.run()
+        # self._run_loads()
         
         for output in self.outputs:
             output.run()
+        # self._run_outputs()
 
     @model_validator(mode='before')
     @classmethod

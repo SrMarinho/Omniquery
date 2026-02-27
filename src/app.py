@@ -1,3 +1,4 @@
+import time
 import yaml
 from src.entities.pipeline import Pipeline
 from src.config import memory_database
@@ -20,5 +21,8 @@ class App:
 
     def run(self) -> None:
         print("App is running")
+        start_time = time.time()
         self.pipeline.run()
+        total_time = time.time() - start_time
+        print(f"✅ Pipeline execution completed in {total_time:.2f} seconds")
         memory_database.close()

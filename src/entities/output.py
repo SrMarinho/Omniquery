@@ -1,4 +1,9 @@
 import time
+import csv
+import io
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import queue
 from pathlib import Path
 from pydantic import BaseModel, Field, model_validator
 from typing import Dict, Any, Type
@@ -25,80 +30,62 @@ class DatabaseOutput(Output):
     
     def _transfer(self, source_database: DuckDBPyConnection, output_database: Engine, name: str, query: str) -> None:
         """
-        Transfere dados em chunks do DuckDB para qualquer banco SQLAlchemy.
+        Transfere dados do DuckDB para PostgreSQL de forma simples.
         """
-        chunk_size = 500000
-        total_rows = 0
+        import io
+        import time
+        import sys
+        
         start_time = time.time()
-        
-        first_chunk = True
-        chunk_count = 0
-        
-        # Executa a query no DuckDB
-        cursor = source_database.execute(query)
-        
-        # Pega os nomes das colunas (convertendo para minúsculo)
-        columns = [desc[0].lower() for desc in cursor.description]
+        conn = output_database.raw_connection()
         
         try:
-            while True:
-                # Busca um chunk de dados
-                rows = cursor.fetchmany(chunk_size)
-                if not rows:
-                    break
-                    
-                chunk_count += 1
-                chunk_start = time.time()
-                
-                # Cria DataFrame com os dados do chunk
-                chunk_df = pd.DataFrame(rows, columns=columns)
-                
-                print(f"🔄 Transferindo chunk {chunk_count}: {len(chunk_df)} linhas para tabela {name}")
-                
-                # Decide se é replace ou append
-                if first_chunk:
-                    chunk_df.to_sql(
-                        name=name,
-                        con=output_database,
-                        if_exists=self.options.get("if_exists", "replace"),
-                        index=False,
-                        chunksize=chunk_size,
-                        method='multi'
-                    )
-                    first_chunk = False
-                else:
-                    chunk_df.to_sql(
-                        name=name,
-                        con=output_database,
-                        if_exists='append',
-                        index=False,
-                        chunksize=chunk_size,
-                        method='multi'
-                    )
-                
-                # Estatísticas do chunk
-                chunk_time = time.time() - chunk_start
-                total_rows += len(chunk_df)
-                
-                if chunk_time > 0:
-                    speed = len(chunk_df) / chunk_time
-                    print(f"  → {len(chunk_df):,} linhas em {chunk_time:.2f}s ({speed:,.0f} linhas/s)")
-                
-                del chunk_df
-                
-        except Exception as e:
-            print(f"❌ Erro durante transferência: {e}")
-            raise
-        
-        # Estatísticas finais
-        total_time = time.time() - start_time
-        print(f"\n✅ Transferência concluída para tabela {name}:")
-        print(f"   📊 Total: {total_rows:,} linhas em {chunk_count} chunks")
-        print(f"   ⏱️  Tempo total: {total_time:.2f}s")
-        
-        if total_time > 0 and total_rows > 0:
-            avg_speed = total_rows / total_time
-            print(f"   🚀 Velocidade média: {avg_speed:,.0f} linhas/s")
+            cur = conn.cursor()
+            cur.execute("SET synchronous_commit TO OFF")
+            
+            # Limpa tabela existente se necessário
+            if self.options.get("if_exists", "replace") == "replace":
+                cur.execute(f'DROP TABLE IF EXISTS {name}')
+            
+            # Executa query e obtém dados
+            print("📊 Executando query...")
+            result = source_database.execute(query)
+            rows = result.fetchall()
+            columns = [desc[0].lower() for desc in result.description]
+            
+            # Cria tabela
+            columns_def = ', '.join([f'"{col}" TEXT' for col in columns])
+            cur.execute(f'CREATE TABLE {name} ({columns_def})')
+            
+            # Prepara dados para COPY
+            print(f"📤 Transferindo {len(rows):,} linhas...")
+            output = io.StringIO()
+            data_size = 0
+            for row in rows:
+                line = '\t'.join(['\\N' if v is None else str(v) for v in row])
+                data_size += len(line.encode('utf-8')) + 1  # +1 para o newline
+                output.write(line + '\n')
+            output.seek(0)
+            
+            # COPY para PostgreSQL
+            cur.copy_from(output, name, sep='\t', null='\\N', columns=columns)
+            conn.commit()
+            
+            # Otimiza
+            cur.execute(f"ANALYZE {name}")
+            conn.commit()
+            
+            total_time = time.time() - start_time
+            data_size_mb = data_size / (1024 * 1024)
+            speed_mb_s = data_size_mb / total_time if total_time > 0 else 0
+            
+            print(f"✅ Concluído em {total_time:.2f}s "
+                f"({len(rows)/total_time:,.0f} linhas/s, "
+                f"{speed_mb_s:.2f} MB/s)")
+            
+        finally:
+            cur.close()
+            conn.close()
 
     def run(self) -> None:
         print(f"Writing in database: {self.output_database}, table: {self.name}")

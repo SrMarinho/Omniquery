@@ -56,7 +56,7 @@ class DatabaseLoader(Loader):
         duck_conn = to_engine
         try:
             query = table.content
-            chunk_size = 100000
+            chunk_size = 500000
             
             first_chunk = True
             
