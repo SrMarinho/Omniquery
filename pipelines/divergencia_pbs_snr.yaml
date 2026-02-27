@@ -167,7 +167,7 @@ outputs:
       SELECT 
         A.*, B.*
       FROM 
-        nf_compra_devolucoes A
+        nf_compras_devolucoes A
         LEFT JOIN vendas_senior B ON B.CODEMP = A.codigo_integracao
                                   AND B.CODFIL = A.filial_senior
                                   AND B.NUMNFV = A.nota_fiscal
@@ -179,7 +179,7 @@ outputs:
       SELECT 
         A.*, B.*
       FROM 
-        nf_compra A
+        nf_compras A
         LEFT JOIN compras_senior B ON B.CODEMP = A.codigo_integracao
                                   AND B.CODFIL = A.filial_senior
                                   AND B.NUMNFC = A.nota_fiscal
