@@ -30,15 +30,18 @@ class DatabaseOutput(Output):
     
     def _transfer(self, source_database: DuckDBPyConnection, output_database: Engine, name: str, query: str) -> None:
         """
-        Transfere dados do DuckDB para PostgreSQL de forma simples.
+        Transfere dados do DuckDB para PostgreSQL em batches usando fetchmany.
         """
+        # Configurações
+        BATCH_SIZE = 500000
+        
         # Tempo de configuração
         config_start = time.time()
         conn = output_database.raw_connection()
         config_time = time.time() - config_start
 
         print(f"📤 Starting transfer: DuckDB ➔ PostgreSQL [Table: {name}]")
-        print(f"⚙️  Settings: synchronous_commit=OFF | if_exists={self.options.get('if_exists', 'replace')}")
+        print(f"⚙️  Settings: synchronous_commit=OFF | if_exists={self.options.get('if_exists', 'replace')} | batch_size={BATCH_SIZE}")
         print("─" * 60)
         
         try:
@@ -49,41 +52,48 @@ class DatabaseOutput(Output):
             if self.options.get("if_exists", "replace") == "replace":
                 cur.execute(f'DROP TABLE IF EXISTS {name}')
             
-            # Executa query e obtém dados
+            # Executa query e obtém cursor para fetchmany
             print("📊 Executing query...")
             query_start = time.time()
             result = source_database.execute(query)
-            rows = result.fetchall()
             columns = [desc[0].lower() for desc in result.description]
             query_time = time.time() - query_start
-            print(f"  Query executed: {len(rows):,} rows retrieved ⏱️  {query_time:.2f}s")
+            print(f"  Query executed: {columns} ⏱️  {query_time:.2f}s")
             
             # Cria tabela
             columns_def = ', '.join([f'"{col}" TEXT' for col in columns])
             cur.execute(f'CREATE TABLE {name} ({columns_def})')
-            
-            # Prepara dados para COPY
-            transfer_start = time.time()
-            print(f"  Preparing data for transfer...")
-            
-            output = io.StringIO()
-            data_size = 0
-            for i, row in enumerate(rows, 1):
-                line = '\t'.join(['\\N' if v is None else str(v) for v in row])
-                data_size += len(line.encode('utf-8')) + 1  # +1 para o newline
-                output.write(line + '\n')
-                
-                # Feedback a cada 500k linhas
-                if i % 500000 == 0:
-                    print(f"    Processed {i:,} rows...")
-            
-            output.seek(0)
-            
-            # COPY para PostgreSQL
-            copy_start = time.time()
-            cur.copy_from(output, name, sep='\t', null='\\N', columns=columns)
             conn.commit()
-            copy_time = time.time() - copy_start
+            
+            # Processa dados em batches com fetchmany
+            transfer_start = time.time()
+            print(f"  Transferring data in batches of {BATCH_SIZE:,} rows...")
+            
+            batch_num = 0
+            total_rows = 0
+            data_size = 0
+            
+            while True:
+                # Pega próximo batch
+                rows = result.fetchmany(BATCH_SIZE)
+                if not rows:
+                    break
+                    
+                batch_num += 1
+                total_rows += len(rows)
+                
+                # Prepara dados para COPY
+                output = io.StringIO()
+                for row in rows:
+                    line = '\t'.join(['\\N' if v is None else str(v) for v in row])
+                    data_size += len(line.encode('utf-8')) + 1
+                    output.write(line + '\n')
+                
+                output.seek(0)
+                
+                # COPY para PostgreSQL
+                cur.copy_from(output, name, sep='\t', null='\\N', columns=columns)
+                conn.commit()
             
             # Otimiza
             cur.execute(f"ANALYZE {name}")
@@ -92,7 +102,6 @@ class DatabaseOutput(Output):
             transfer_time = time.time() - transfer_start
             total_time = time.time() - config_start
             
-            total_rows = len(rows)
             avg_speed = total_rows / transfer_time if transfer_time > 0 else 0
             data_size_mb = data_size / (1024 * 1024)
             speed_mb_s = data_size_mb / transfer_time if transfer_time > 0 else 0
@@ -102,6 +111,7 @@ class DatabaseOutput(Output):
             print(f"📊 Final summary for table {name}:")
             print(f"   • Total records:     {total_rows:>15,}")
             print(f"   • Data size:         {data_size_mb:>15.2f} MB")
+            print(f"   • Batches processed: {batch_num:>15}")
             print(f"   • Transfer time:     {transfer_time:>15.2f}s")
             print(f"   • Average speed:     {avg_speed:>15,.0f} rows/s  ({speed_mb_s:.2f} MB/s)")
             print("\n")
@@ -110,7 +120,10 @@ class DatabaseOutput(Output):
             print("❌" * 30)
             print(f"🔴 ERROR transferring data for {name}")
             print(f"⚠️  Details: {str(e)}")
-            print(f"📋 Records processed before error: {len(rows) if 'rows' in locals() else 0:,}")
+            if 'total_rows' in locals():
+                print(f"📋 Records processed before error: {total_rows:,}")
+            if 'batch_num' in locals():
+                print(f"📦 Batches completed before error: {batch_num}")
             print("❌" * 30)
             
         finally:
