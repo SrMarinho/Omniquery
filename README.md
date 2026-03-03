@@ -115,7 +115,6 @@ outputs:
       SELECT * FROM minha_tabela
       JOIN dados_csv ON ...
     type: database            # "database" ou "file"
-    output_database: postgresql  # Banco de destino (para type: database)
     options:
       if_exists: replace      # "replace" para recriar a tabela
 ```
