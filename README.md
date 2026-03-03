@@ -148,7 +148,6 @@ outputs:
       FROM vendas v
       LEFT JOIN metas m ON v.setor = m.setor
     type: database
-    output_database: postgresql
 
   - name: outputs/relatorio_vendas.csv
     query: |
