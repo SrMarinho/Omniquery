@@ -3,11 +3,13 @@ from pydantic import BaseModel, Field, model_validator
 from typing import List, Dict, Any
 from src.entities.loader import Loader, LoaderFactory
 from src.entities.output import OutputFactory, Output
+from src.entities.parameter import Parameter
 
 
 class Pipeline(BaseModel):
     name: str = Field(default="")
     description: str = Field(default="")
+    parameters: List[Parameter] = Field(default_factory=list)
     loads: List[Loader] = Field(default=[])
     outputs: List[Output] = Field(default=[])
     
