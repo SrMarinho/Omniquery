@@ -80,7 +80,7 @@ procfit:
 ## Uso
 
 ```bash
-python main.py --pipeline pipelines/meu_pipeline.yaml
+uv run main.py --pipeline pipelines/meu_pipeline.yaml
 ```
 
 ## Pipelines
