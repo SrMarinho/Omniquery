@@ -9,7 +9,6 @@ def main() -> None:
     load_dotenv()
     args = parse_args()
     args_dict = vars(args)
-    print(f"Parsed arguments: {args_dict}")
     app = App(**args_dict)
     app.run()
 
