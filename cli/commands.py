@@ -58,7 +58,6 @@ def create_parser():
         pipeline_loaded = load_pipeline(os.path.join(base_path, "pipelines", pipeline))
 
         if 'parameters' in pipeline_loaded:
-            print(f"Parameters for pipeline {pipeline}:")
             for parameter in pipeline_loaded['parameters']:
                 param_name = f"--{parameter['name']}"
 

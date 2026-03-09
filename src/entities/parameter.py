@@ -15,16 +15,5 @@ class Parameter(BaseModel):
         param_type = data.get('type', '').lower()
         if param_type not in ['string', 'integer', 'int', 'float', 'boolean', 'bool', 'date']:
             raise ValueError(f"Invalid parameter type: {param_type}")
-        
-        if param_type == 'integer' or param_type == 'int':
-            data['type'] = int
-        elif param_type == 'float':
-            data['type'] = float
-        elif param_type == 'boolean' or param_type == 'bool':
-            data['type'] = bool
-        elif param_type == 'date':
-            data['type'] = date
-        else:
-            data['type'] = str
 
         return data

@@ -9,8 +9,7 @@ class App:
         if not self.pipeline_args:
             raise ValueError("Pipeline argument is required")
         
-        print(kwargs)
-        self.pipeline = Pipeline(**self.load_pipeline())
+        self.pipeline = Pipeline(**self.load_pipeline(), **kwargs)
 
     def load_pipeline(self) -> dict:
         if isinstance(self.pipeline_args, str):
@@ -28,8 +27,7 @@ class App:
         print("🚀 App is running")
         start_time = time.time()
         try:
-            print(self.pipeline.parameters)
-            # self.pipeline.run()
+            self.pipeline.run()
         except Exception as e:
             print(f"Error running pipeline: {e}")
         finally:

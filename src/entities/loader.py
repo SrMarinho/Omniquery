@@ -34,9 +34,6 @@ class DatabaseLoader(Loader):
     
     def run(self) -> None:
         """Executa a transferência de dados da fonte para o DuckDB."""
-        
-        import time
-        
         job_start = time.time()
         
         print("─" * 60)
