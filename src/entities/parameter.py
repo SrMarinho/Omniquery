@@ -12,7 +12,7 @@ class Parameter(BaseModel):
     @classmethod
     def validate_type(cls, data: Dict[str, Any]) -> Dict[str, Any]:
         """Valida o tipo do parâmetro e converte para o tipo correto."""
-        param_type = data.get('type', '').lower()
+        param_type = data.get('type', 'string').lower()
         if param_type not in ['string', 'integer', 'int', 'float', 'boolean', 'bool', 'date']:
             raise ValueError(f"Invalid parameter type: {param_type}")
 
