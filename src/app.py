@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class App:
     def __init__(self, **kwargs: Any) -> None:
-        self.pipeline_args = kwargs.get('pipeline', None)
+        self.pipeline_args = kwargs.get("pipeline", None)
         if not self.pipeline_args:
             raise ValueError("Pipeline argument is required")
 
@@ -27,7 +27,7 @@ class App:
 
     def pipeline_parameters(self) -> dict:  # type: ignore[type-arg]
         """Retorna os parâmetros do pipeline, se existirem."""
-        return getattr(self.pipeline, 'parameters', {})
+        return getattr(self.pipeline, "parameters", {})
 
     def run(self) -> None:
         logger.info("App is running")

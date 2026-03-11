@@ -1,3 +1,4 @@
+import logging
 from threading import Thread
 from typing import Any
 
@@ -6,6 +7,8 @@ from pydantic import BaseModel, Field, model_validator
 from src.entities.loader import Loader, LoaderFactory
 from src.entities.output import Output, OutputFactory
 from src.entities.parameter import Parameter
+
+logger = logging.getLogger(__name__)
 
 
 class Pipeline(BaseModel):
@@ -17,7 +20,7 @@ class Pipeline(BaseModel):
 
     def _run_loads(self) -> None:
         if self.name:
-            print(f"Running pipeline: {self.name}")
+            logger.info("Running pipeline: %s", self.name)
         loads_theads = []
         for load in self.loads:
             t = Thread(target=load.run)
@@ -46,14 +49,14 @@ class Pipeline(BaseModel):
             output.run()
         # self._run_outputs()
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     @classmethod
     def create_concrete_loaders(cls, data: dict[str, Any]) -> dict[str, Any]:
         """Factory method para criar instâncias concretas de Loader"""
-        if 'loads' in data and isinstance(data['loads'], list):
+        if "loads" in data and isinstance(data["loads"], list):
             concrete_loaders: list[Loader] = []
 
-            for loader_data in data['loads']:
+            for loader_data in data["loads"]:
                 if isinstance(loader_data, dict):
                     loader_instance = LoaderFactory.create(loader_data)
                     concrete_loaders.append(loader_instance)
@@ -62,18 +65,18 @@ class Pipeline(BaseModel):
                 else:
                     raise ValueError(f"Tipo inválido para output: {type(loader_data)}")
 
-            data['loads'] = concrete_loaders
+            data["loads"] = concrete_loaders
 
         return data
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     @classmethod
     def create_concrete_outputs(cls, data: dict[str, Any]) -> dict[str, Any]:
         """Factory method para criar instâncias concretas de Output"""
-        if 'outputs' in data and isinstance(data['outputs'], list):
+        if "outputs" in data and isinstance(data["outputs"], list):
             concrete_outputs = []
 
-            for output_data in data['outputs']:
+            for output_data in data["outputs"]:
                 if isinstance(output_data, dict):
                     output_instance = OutputFactory.create(output_data)
                     concrete_outputs.append(output_instance)
@@ -82,6 +85,6 @@ class Pipeline(BaseModel):
                 else:
                     raise ValueError(f"Tipo inválido para output: {type(output_data)}")
 
-            data['outputs'] = concrete_outputs
+            data["outputs"] = concrete_outputs
 
         return data

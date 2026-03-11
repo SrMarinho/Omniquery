@@ -13,5 +13,6 @@ def main() -> None:
     app = App(**args_dict)
     app.run()
 
+
 if __name__ == "__main__":
     main()

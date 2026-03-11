@@ -9,12 +9,12 @@ class Parameter(BaseModel):
     description: str | None = Field(default="")
     required: bool = Field(default=False)
 
-    @model_validator(mode='before')
+    @model_validator(mode="before")
     @classmethod
     def validate_type(cls, data: dict[str, Any]) -> dict[str, Any]:
         """Valida o tipo do parâmetro e converte para o tipo correto."""
-        param_type = data.get('type', 'string').lower()
-        if param_type not in ['string', 'integer', 'int', 'float', 'boolean', 'bool', 'date']:
+        param_type = data.get("type", "string").lower()
+        if param_type not in ["string", "integer", "int", "float", "boolean", "bool", "date"]:
             raise ValueError(f"Invalid parameter type: {param_type}")
 
         return data

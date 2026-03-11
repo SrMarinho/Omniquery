@@ -135,7 +135,7 @@ loads:
               DATGER,
               VLRLIQ
           FROM E140NFV A
-          WHERE 
+          WHERE
             CODEMP = 2
             -- AND CODFIL IN(1,2,3,4,5,6,7,9,10,11,12,13,14,15,16)
             AND DATEMI >= TO_DATE('2025-05-01', 'YYYY-MM-DD')
@@ -161,9 +161,9 @@ outputs:
   - name: divergencia_saidas
     type: database
     query: |
-      SELECT 
+      SELECT
         A.*, B.*
-      FROM 
+      FROM
         nf_faturamento A
         LEFT JOIN vendas_senior B ON B.CODEMP = A.CODIGO_INTEGRACAO
                                   AND B.CODFIL = A.FILIAL_SENIOR
@@ -173,21 +173,21 @@ outputs:
 
       union all
 
-      SELECT 
+      SELECT
         A.*, B.*
-      FROM 
+      FROM
         nf_compras_devolucoes A
         LEFT JOIN vendas_senior B ON B.CODEMP = A.codigo_integracao
                                   AND B.CODFIL = A.filial_senior
                                   AND B.NUMNFV = A.nota_fiscal
                                   AND B.DATEMI = A.data_emissao
-      WHERE B.NUMNFV IS NULL      
+      WHERE B.NUMNFV IS NULL
   - name: divergencia_entradas
     type: database
     query: |
-      SELECT 
+      SELECT
         A.*, B.*
-      FROM 
+      FROM
         nf_compras A
         LEFT JOIN compras_senior B ON B.CODEMP = A.codigo_integracao
                                   AND B.CODFIL = A.filial_senior
@@ -197,9 +197,9 @@ outputs:
 
       union all
 
-      SELECT 
+      SELECT
         A.*, B.*
-      FROM 
+      FROM
         nf_faturamento_devolucoes A
         LEFT JOIN compras_senior B ON B.CODEMP = A.codigo_integracao
                                   AND B.CODFIL = A.filial_senior

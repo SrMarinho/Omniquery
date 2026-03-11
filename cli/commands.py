@@ -18,6 +18,7 @@ def get_pipelines():
         return []
     return [f for f in os.listdir(pipelines_dir) if f.endswith(".yaml")]
 
+
 def load_pipeline(pipeline_file: str) -> dict:  # type: ignore[type-arg]
     """
     Carrega um pipeline a partir de um arquivo YAML.
@@ -28,70 +29,64 @@ def load_pipeline(pipeline_file: str) -> dict:  # type: ignore[type-arg]
     else:
         raise ValueError("Invalid type for pipeline argument")
 
+
 def create_base_parser():
     """Cria o parser base sem argumentos do pipeline"""
     parser = argparse.ArgumentParser(
-        prog='OmniQuery',
-        description='Command line tool for file processing and analysis',
-        epilog='Exemplo: uv run main.py pipelines/meu_pipeline.yaml',
+        prog="OmniQuery",
+        description="Command line tool for file processing and analysis",
+        epilog="Exemplo: uv run main.py pipelines/meu_pipeline.yaml",
         add_help=True,
-        conflict_handler='resolve'
+        conflict_handler="resolve",
     )
 
-    parser.add_argument(
-        'pipeline',
-        nargs='?',
-        help='Caminho para o arquivo YAML da pipeline'
-    )
+    parser.add_argument("pipeline", nargs="?", help="Caminho para o arquivo YAML da pipeline")
 
     return parser
+
 
 def setup_pipeline_arguments(parser, pipeline_loaded, pipeline_name):
     """
     Configura os argumentos específicos da pipeline
     """
     TYPE_MAP = {
-        'str': str,
-        'int': int,
-        'float': float,
-        'bool': lambda x: x.lower() in ('true', '1', 'yes', 'y'),
-        'date': lambda x: datetime.strptime(x, '%Y-%m-%d').date(),
+        "str": str,
+        "int": int,
+        "float": float,
+        "bool": lambda x: x.lower() in ("true", "1", "yes", "y"),
+        "date": lambda x: datetime.strptime(x, "%Y-%m-%d").date(),
     }
 
-    if pipeline_loaded and 'parameters' in pipeline_loaded and pipeline_loaded['parameters']:
+    if pipeline_loaded and "parameters" in pipeline_loaded and pipeline_loaded["parameters"]:
         group_title = f'Parâmetros da pipeline "{pipeline_name}"'
-        group_description = 'Argumentos específicos para esta pipeline (use -h após especificar a pipeline para ver esta seção)'
+        group_description = (
+            "Argumentos específicos para esta pipeline (use -h após especificar a pipeline para ver esta seção)"
+        )
 
         pipeline_group = parser.add_argument_group(title=group_title, description=group_description)
 
-        for parameter in pipeline_loaded['parameters']:
-            param_name = parameter['name']
-            param_type = parameter.get('type', 'str')
+        for parameter in pipeline_loaded["parameters"]:
+            param_name = parameter["name"]
+            param_type = parameter.get("type", "str")
             type_func = TYPE_MAP.get(param_type, str)
 
             help_parts = []
-            if parameter.get('description'):
-                help_parts.append(parameter['description'])
-            if 'default' in parameter:
+            if parameter.get("description"):
+                help_parts.append(parameter["description"])
+            if "default" in parameter:
                 help_parts.append(f"default: {parameter['default']}")
-            if parameter.get('required', False):
+            if parameter.get("required", False):
                 help_parts.append("(obrigatório)")
 
             help_text = " | ".join(help_parts) if help_parts else ""
 
-            kwargs = {
-                'type': type_func,
-                'required': parameter.get('required', False),
-                'help': help_text
-            }
+            kwargs = {"type": type_func, "required": parameter.get("required", False), "help": help_text}
 
-            if 'default' in parameter and not parameter.get('required', False):
-                kwargs['default'] = parameter['default']
+            if "default" in parameter and not parameter.get("required", False):
+                kwargs["default"] = parameter["default"]
 
-            pipeline_group.add_argument(
-                f"--{param_name}",
-                **kwargs
-            )
+            pipeline_group.add_argument(f"--{param_name}", **kwargs)
+
 
 def parse_args():
     """
@@ -100,11 +95,11 @@ def parse_args():
     """
     parser = create_base_parser()
 
-    if len(sys.argv) == 1 or (len(sys.argv) == 2 and sys.argv[1] in ['-h', '--help']):
+    if len(sys.argv) == 1 or (len(sys.argv) == 2 and sys.argv[1] in ["-h", "--help"]):
         parser.print_help()
         sys.exit(0)
 
-    if len(sys.argv) > 1 and not sys.argv[1].startswith('-'):
+    if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
         pipeline_arg = sys.argv[1]
 
         try:
@@ -122,7 +117,7 @@ def parse_args():
 
                 setup_pipeline_arguments(parser, pipeline_loaded, pipeline_name)
 
-                if len(sys.argv) == 3 and sys.argv[2] in ['-h', '--help']:
+                if len(sys.argv) == 3 and sys.argv[2] in ["-h", "--help"]:
                     parser.print_help()
                     sys.exit(0)
             else:
@@ -138,7 +133,7 @@ def parse_args():
 
     args = parser.parse_args()
 
-    if not hasattr(args, 'pipeline_data'):
+    if not hasattr(args, "pipeline_data"):
         try:
             pipeline_path = args.pipeline
             if not os.path.exists(pipeline_path):
@@ -152,9 +147,9 @@ def parse_args():
             args.pipeline_data = pipeline_loaded
 
             pipeline_params = {}
-            if 'parameters' in pipeline_loaded:
-                for param in pipeline_loaded['parameters']:
-                    param_name = param['name']
+            if "parameters" in pipeline_loaded:
+                for param in pipeline_loaded["parameters"]:
+                    param_name = param["name"]
                     if hasattr(args, param_name):
                         pipeline_params[param_name] = getattr(args, param_name)
 

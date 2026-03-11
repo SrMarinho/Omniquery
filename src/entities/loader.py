@@ -24,6 +24,7 @@ class Loader(BaseModel):
     def run(self) -> None:
         raise NotImplementedError("Loader not implemented yet")
 
+
 class DatabaseLoader(Loader):
     type: str = "database"
     database: str = "memory"
@@ -76,7 +77,7 @@ class DatabaseLoader(Loader):
         except Exception as e:
             job_time = time.time() - job_start
             logger.error("BULK TRANSFER FAILED — source: %s, error: %s (%.2fs)", self.source, e, job_time)
-            if 'tables_processed' in locals():
+            if "tables_processed" in locals():
                 logger.error("Tables processed before error: %d/%d", tables_processed, len(self.tables))
             raise
 
@@ -107,7 +108,7 @@ class DatabaseLoader(Loader):
                 chunk_rows = len(chunk_df)
 
                 if duck_conn:
-                    duck_conn.register('temp_df', chunk_df)
+                    duck_conn.register("temp_df", chunk_df)
 
                     if first_chunk:
                         duck_conn.execute(f"""
@@ -123,7 +124,7 @@ class DatabaseLoader(Loader):
                         """)
                         operation = "Appended"
 
-                    duck_conn.unregister('temp_df')
+                    duck_conn.unregister("temp_df")
 
                 chunk_time = time.time() - chunk_start
                 total_rows += chunk_rows
@@ -143,7 +144,10 @@ class DatabaseLoader(Loader):
             logger.info("  Average speed:  %s rows/s", f"{avg_speed:,.0f}")
 
         except Exception as e:
-            logger.error("ERROR transferring data for %s: %s (records processed: %s)", table.alias, e, f"{total_rows:,}")
+            logger.error(
+                "ERROR transferring data for %s: %s (records processed: %s)", table.alias, e, f"{total_rows:,}"
+            )
+
 
 class FileLoader(Loader):
     type: str = "file"
@@ -152,23 +156,25 @@ class FileLoader(Loader):
         """Transfers data from a file to DuckDB."""
         df = pd.read_csv(source)
         df.columns = df.columns.str.lower()
-        to_engine.register('temp_df', df)
+        to_engine.register("temp_df", df)
         to_engine.execute(f"""
             CREATE OR REPLACE TABLE {table.alias} AS
             SELECT * FROM temp_df
         """)
-        to_engine.unregister('temp_df')
+        to_engine.unregister("temp_df")
 
     def run(self) -> None:
         logger.info("Running loads from source: %s", self.source)
         for table in self.tables:
             self._transfer(self.source, memory_database, table)
 
+
 class LoaderFactory:
     loader_types = {
         "database": DatabaseLoader,
         "file": FileLoader,
     }
+
     @staticmethod
     def create(config: dict[str, Any]) -> Loader:
         loader_type: str = config.get("type", "")

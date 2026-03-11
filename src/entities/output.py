@@ -24,6 +24,7 @@ class Output(BaseModel):
     def run(self) -> None:
         logger.info("Writing output type: %s", type(self).__name__)
 
+
 class DatabaseOutput(Output):
     type: str = "database"
     output_database: str = Field(default="postgresql")
@@ -37,7 +38,11 @@ class DatabaseOutput(Output):
         conn = output_database.raw_connection()
 
         logger.info("Starting transfer: DuckDB → PostgreSQL [table: %s]", name)
-        logger.debug("Settings: synchronous_commit=OFF | if_exists=%s | batch_size=%s", self.options.get('if_exists', 'replace'), BATCH_SIZE)
+        logger.debug(
+            "Settings: synchronous_commit=OFF | if_exists=%s | batch_size=%s",
+            self.options.get("if_exists", "replace"),
+            BATCH_SIZE,
+        )
         logger.info("─" * 60)
 
         try:
@@ -45,7 +50,7 @@ class DatabaseOutput(Output):
             cur.execute("SET synchronous_commit TO OFF")
 
             if self.options.get("if_exists", "replace") == "replace":
-                cur.execute(f'DROP TABLE IF EXISTS {name}')
+                cur.execute(f"DROP TABLE IF EXISTS {name}")
 
             logger.info("Executing query...")
             query_start = time.time()
@@ -54,8 +59,8 @@ class DatabaseOutput(Output):
             query_time = time.time() - query_start
             logger.debug("Query executed — columns: %s (%.2fs)", columns, query_time)
 
-            columns_def = ', '.join([f'"{col}" TEXT' for col in columns])
-            cur.execute(f'CREATE TABLE {name} ({columns_def})')
+            columns_def = ", ".join([f'"{col}" TEXT' for col in columns])
+            cur.execute(f"CREATE TABLE {name} ({columns_def})")
             conn.commit()
 
             transfer_start = time.time()
@@ -75,13 +80,13 @@ class DatabaseOutput(Output):
 
                 output = io.StringIO()
                 for row in rows:
-                    line = '\t'.join(['\\N' if v is None else str(v) for v in row])
-                    data_size += len(line.encode('utf-8')) + 1
-                    output.write(line + '\n')
+                    line = "\t".join(["\\N" if v is None else str(v) for v in row])
+                    data_size += len(line.encode("utf-8")) + 1
+                    output.write(line + "\n")
 
                 output.seek(0)
 
-                cur.copy_from(output, name, sep='\t', null='\\N', columns=columns)  # type: ignore[attr-defined]
+                cur.copy_from(output, name, sep="\t", null="\\N", columns=columns)  # type: ignore[attr-defined]
                 conn.commit()
 
             cur.execute(f"ANALYZE {name}")
@@ -103,9 +108,9 @@ class DatabaseOutput(Output):
 
         except Exception as e:
             logger.error("ERROR transferring data for %s: %s", name, e)
-            if 'total_rows' in locals():
+            if "total_rows" in locals():
                 logger.error("  Records processed before error: %s", f"{total_rows:,}")
-            if 'batch_num' in locals():
+            if "batch_num" in locals():
                 logger.error("  Batches completed before error: %d", batch_num)
 
         finally:
@@ -133,6 +138,7 @@ class DatabaseOutput(Output):
             job_time = time.time() - job_start
             logger.error("JOB FAILED: %s › %s — %s (%.2fs)", self.output_database, self.name, e, job_time)
             raise
+
 
 class FileOutput(Output):
     type: str = "file"
@@ -182,7 +188,9 @@ class FileOutput(Output):
                 chunk_time = time.time() - chunk_start
                 total_rows += chunk_rows
 
-                logger.info("  Batch #%2d %-10s : %10s rows  %.2fs", chunk_count, operation, f"{chunk_rows:,}", chunk_time)
+                logger.info(
+                    "  Batch #%2d %-10s : %10s rows  %.2fs", chunk_count, operation, f"{chunk_rows:,}", chunk_time
+                )
 
                 del chunk_df
 
@@ -205,12 +213,13 @@ class FileOutput(Output):
                 logger.warning("No data transferred for %s", filepath.name)
 
         except Exception as e:
-            logger.error("ERROR transferring data to %s: %s (records processed: %s)", filepath.name, e, f"{total_rows:,}")
+            logger.error(
+                "ERROR transferring data to %s: %s (records processed: %s)", filepath.name, e, f"{total_rows:,}"
+            )
             if filepath.exists() and total_rows == 0:
                 filepath.unlink()
                 logger.info("Removed incomplete file: %s", filepath.name)
             raise
-
 
     def run(self) -> None:
         """Executa a transferência de dados."""
@@ -227,11 +236,13 @@ class FileOutput(Output):
             logger.error("JOB FAILED: %s — %s", self.name, e)
             raise
 
+
 class OutputFactory:
     output_types = {
         "database": DatabaseOutput,
         "file": FileOutput,
     }
+
     @staticmethod
     def create(config: dict[str, Any]) -> Output:
         output_type: str = config.get("type", "")

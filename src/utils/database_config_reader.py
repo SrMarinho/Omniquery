@@ -27,14 +27,16 @@ def get_database_config(database: str) -> dict:  # type: ignore[type-arg]
         data[database]["connection_string"] = substitute_env_variables(data[database]["connection_string"])
         return data[database]  # type: ignore[no-any-return]
 
+
 def substitute_env_variables(connection_string: str) -> str:
     """
     Substitui variáveis entre {{ }} pelos valores correspondentes do ambiente
     """
+
     def replace_match(match: re.Match) -> str:  # type: ignore[type-arg]
         env_var = match.group(1)
         return os.getenv(env_var.strip(), f"{{{env_var}}}")
 
-    pattern = r'\{\{\s*([^}]+)\s*\}\}'
+    pattern = r"\{\{\s*([^}]+)\s*\}\}"
 
     return re.sub(pattern, replace_match, connection_string)
