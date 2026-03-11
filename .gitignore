@@ -15,7 +15,8 @@ wheels/
 !.env.example
 
 # IDE-specific files
-.vscode/
+.vscode/*
+!.vscode/settings.json
 .idea/
 *.iml
 
@@ -28,3 +29,5 @@ wheels/
 outputs/
 
 .claude/
+
+logs/
