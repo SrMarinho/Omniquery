@@ -19,3 +19,7 @@ PIPELINE_WORKERS: int = int(os.getenv("PIPELINE_WORKERS", "4"))
 
 # Oracle ODBC (turbodbc) — nome do driver instalado no sistema
 ORACLE_ODBC_DRIVER: str = os.getenv("ORACLE_ODBC_DRIVER", "Oracle")
+
+# PostgreSQL session tuning para bulk import
+PG_WORK_MEM: str = os.getenv("PG_WORK_MEM", "256MB")
+PG_MAINTENANCE_WORK_MEM: str = os.getenv("PG_MAINTENANCE_WORK_MEM", "1GB")

@@ -12,6 +12,7 @@ from sqlalchemy.engine import Engine, create_engine
 from tqdm import tqdm
 
 from src.config import memory_database
+from src.config.settings import PG_MAINTENANCE_WORK_MEM, PG_WORK_MEM
 from src.exceptions import OmniQueryError, OutputError
 from src.utils.database_config_reader import get_database_config
 from src.utils.retry import db_retry
@@ -94,6 +95,8 @@ class DatabaseOutput(Output):
         try:
             cur = conn.cursor()
             cur.execute("SET synchronous_commit TO OFF")
+            cur.execute(f"SET work_mem = '{PG_WORK_MEM}'")
+            cur.execute(f"SET maintenance_work_mem = '{PG_MAINTENANCE_WORK_MEM}'")
 
             if self.options.get("if_exists", "replace") == "replace":
                 cur.execute(f"DROP TABLE IF EXISTS {name}")
