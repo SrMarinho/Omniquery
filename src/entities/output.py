@@ -163,55 +163,79 @@ class FileOutput(Output):
 
     def _transfer(self, source_engine: DuckDBPyConnection, file_path: str, query: str) -> None:
         """
-        Transfere dados do DuckDB para arquivo CSV em chunks.
+        Transfere dados do DuckDB para arquivo (CSV em chunks, Excel em memória).
         """
         filepath = Path(file_path)
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.info("Starting transfer: DuckDB → CSV [file: %s]", filepath.name)
-        logger.debug("Settings: chunk_size=%s | location=%s", f"{FILE_CHUNK_SIZE:,}", file_path)
+        ext = filepath.suffix.lower()
+        is_excel = ext in (".xlsx", ".xls")
+        fmt_label = "Excel" if is_excel else "CSV"
+
+        logger.info("Starting transfer: DuckDB → %s [file: %s]", fmt_label, filepath.name)
+        if not is_excel:
+            logger.debug("Settings: chunk_size=%s | location=%s", f"{FILE_CHUNK_SIZE:,}", file_path)
         logger.info("─" * 60)
 
         total_rows = 0
         transfer_start = time.time()
-        first_chunk = True
-        chunk_count = 0
 
         cursor = source_engine.execute(query)
         columns = [desc[0] for desc in cursor.description]
 
         try:
-            with tqdm(desc=filepath.name, unit="chunk", leave=False) as pbar:
-                while True:
-                    rows = cursor.fetchmany(FILE_CHUNK_SIZE)
-                    if not rows:
-                        break
+            if is_excel:
+                # Excel doesn't support append mode — load everything into memory
+                all_rows = cursor.fetchall()
+                df = pd.DataFrame(all_rows, columns=columns)
+                df.columns = df.columns.str.lower()
+                total_rows = len(df)
 
-                    chunk_count += 1
-                    chunk_start = time.time()
-
-                    chunk_df = pd.DataFrame(rows, columns=columns)
-                    chunk_df.columns = chunk_df.columns.str.lower()
-                    chunk_rows = len(chunk_df)
-
-                    if first_chunk:
-                        chunk_df.to_csv(filepath, index=False)
-                        operation = "Created"
-                        first_chunk = False
-                    else:
-                        chunk_df.to_csv(filepath, mode="a", index=False, header=False)
-                        operation = "Appended"
-
-                    chunk_time = time.time() - chunk_start
-                    total_rows += chunk_rows
-
+                with tqdm(desc=filepath.name, unit="file", leave=False, total=1) as pbar:
+                    df.to_excel(filepath, index=False, engine="openpyxl")
                     pbar.update(1)
-                    pbar.set_postfix({"rows": f"{total_rows:,}", "op": operation})
-                    logger.debug(
-                        "Batch #%2d %-10s : %10s rows  %.2fs", chunk_count, operation, f"{chunk_rows:,}", chunk_time
-                    )
+                    pbar.set_postfix({"rows": f"{total_rows:,}"})
 
-                    del chunk_df
+                del df
+            else:
+                first_chunk = True
+                chunk_count = 0
+
+                with tqdm(desc=filepath.name, unit="chunk", leave=False) as pbar:
+                    while True:
+                        rows = cursor.fetchmany(FILE_CHUNK_SIZE)
+                        if not rows:
+                            break
+
+                        chunk_count += 1
+                        chunk_start = time.time()
+
+                        chunk_df = pd.DataFrame(rows, columns=columns)
+                        chunk_df.columns = chunk_df.columns.str.lower()
+                        chunk_rows = len(chunk_df)
+
+                        if first_chunk:
+                            chunk_df.to_csv(filepath, index=False)
+                            operation = "Created"
+                            first_chunk = False
+                        else:
+                            chunk_df.to_csv(filepath, mode="a", index=False, header=False)
+                            operation = "Appended"
+
+                        chunk_time = time.time() - chunk_start
+                        total_rows += chunk_rows
+
+                        pbar.update(1)
+                        pbar.set_postfix({"rows": f"{total_rows:,}", "op": operation})
+                        logger.debug(
+                            "Batch #%2d %-10s : %10s rows  %.2fs",
+                            chunk_count,
+                            operation,
+                            f"{chunk_rows:,}",
+                            chunk_time,
+                        )
+
+                        del chunk_df
 
             transfer_time = time.time() - transfer_start
 
@@ -225,7 +249,6 @@ class FileOutput(Output):
                 logger.info("Transfer completed: %s", filepath.name)
                 logger.info("  Total records:    %s", f"{total_rows:,}")
                 logger.info("  File size:        %.2f MB", file_size_mb)
-                logger.info("  Chunks:           %s", f"{chunk_count:,}")
                 logger.info("  Transfer time:    %.2fs", transfer_time)
                 logger.info("  Average speed:    %s rows/s (%.2f MB/s)", f"{avg_speed:,.0f}", speed_mb_s)
             else:

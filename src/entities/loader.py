@@ -1,5 +1,6 @@
 import logging
 import time
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -165,7 +166,11 @@ class FileLoader(Loader):
 
     def _transfer(self, source: str, to_engine: DuckDBPyConnection, table: Table) -> None:
         """Transfers data from a file to DuckDB."""
-        df = pd.read_csv(source)
+        ext = Path(source).suffix.lower()
+        if ext in (".xlsx", ".xls"):
+            df = pd.read_excel(source)
+        else:
+            df = pd.read_csv(source)
         df.columns = df.columns.str.lower()
         to_engine.register("temp_df", df)
         to_engine.execute(f"""
