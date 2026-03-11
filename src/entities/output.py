@@ -18,6 +18,53 @@ from src.utils.retry import db_retry
 
 logger = logging.getLogger(__name__)
 
+# Mapeamento de tipos DuckDB → PostgreSQL
+_DUCKDB_TO_PG: dict[str, str] = {
+    "INTEGER": "INTEGER",
+    "INT4": "INTEGER",
+    "INT": "INTEGER",
+    "SIGNED": "INTEGER",
+    "BIGINT": "BIGINT",
+    "INT8": "BIGINT",
+    "LONG": "BIGINT",
+    "HUGEINT": "NUMERIC",
+    "UINTEGER": "BIGINT",
+    "UBIGINT": "NUMERIC",
+    "SMALLINT": "SMALLINT",
+    "INT2": "SMALLINT",
+    "SHORT": "SMALLINT",
+    "TINYINT": "SMALLINT",
+    "INT1": "SMALLINT",
+    "FLOAT": "REAL",
+    "FLOAT4": "REAL",
+    "REAL": "REAL",
+    "DOUBLE": "DOUBLE PRECISION",
+    "FLOAT8": "DOUBLE PRECISION",
+    "BOOLEAN": "BOOLEAN",
+    "BOOL": "BOOLEAN",
+    "DATE": "DATE",
+    "TIMESTAMP": "TIMESTAMP",
+    "TIMESTAMP WITH TIME ZONE": "TIMESTAMPTZ",
+    "TIMESTAMPTZ": "TIMESTAMPTZ",
+    "TIME": "TIME",
+    "BLOB": "BYTEA",
+    "BYTEA": "BYTEA",
+    "UUID": "UUID",
+    "JSON": "JSONB",
+    "INTERVAL": "INTERVAL",
+}
+
+
+def _duckdb_type_to_pg(duckdb_type: str) -> str:
+    """Mapeia tipo DuckDB para PostgreSQL equivalente. Fallback: TEXT."""
+    t = duckdb_type.upper()
+    base = t.split("(")[0].strip()
+    if base in ("DECIMAL", "NUMERIC"):
+        return duckdb_type.upper().replace("DECIMAL", "NUMERIC")
+    if base in ("VARCHAR", "TEXT", "STRING", "CHAR", "CHARACTER VARYING", "BPCHAR"):
+        return "TEXT"
+    return _DUCKDB_TO_PG.get(base, "TEXT")
+
 
 class Output(BaseModel):
     type: str
@@ -51,10 +98,11 @@ class DatabaseOutput(Output):
             if self.options.get("if_exists", "replace") == "replace":
                 cur.execute(f"DROP TABLE IF EXISTS {name}")
 
-            # Obtém schema sem buscar dados
-            schema = source_database.execute(f"SELECT * FROM ({query}) __q LIMIT 0")
-            columns = [desc[0].lower() for desc in schema.description]
-            columns_def = ", ".join([f'"{col}" TEXT' for col in columns])
+            # Obtém schema com tipos reais — sem buscar dados
+            describe = source_database.execute(f"DESCRIBE SELECT * FROM ({query}) __q")
+            schema_info = describe.fetchall()
+            columns = [row[0].lower() for row in schema_info]
+            columns_def = ", ".join(f'"{row[0].lower()}" {_duckdb_type_to_pg(row[1])}' for row in schema_info)
             cur.execute(f"CREATE UNLOGGED TABLE {name} ({columns_def})")
             conn.commit()
 
