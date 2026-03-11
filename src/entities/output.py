@@ -1,5 +1,6 @@
-import io
 import logging
+import os
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -11,7 +12,7 @@ from sqlalchemy.engine import Engine, create_engine
 from tqdm import tqdm
 
 from src.config import memory_database
-from src.config.settings import DB_BATCH_SIZE, FILE_CHUNK_SIZE
+from src.config.settings import FILE_CHUNK_SIZE
 from src.exceptions import OmniQueryError, OutputError
 from src.utils.database_config_reader import get_database_config
 from src.utils.retry import db_retry
@@ -35,17 +36,16 @@ class DatabaseOutput(Output):
 
     def _transfer(self, source_database: DuckDBPyConnection, output_database: Engine, name: str, query: str) -> None:
         """
-        Transfere dados do DuckDB para PostgreSQL em batches usando fetchmany.
+        Transfere dados do DuckDB para PostgreSQL via arquivo CSV temporário.
+        DuckDB exporta nativamente (sem serialização Python), PostgreSQL importa via COPY.
         """
         conn = output_database.raw_connection()
 
         logger.info("Starting transfer: DuckDB → PostgreSQL [table: %s]", name)
-        logger.debug(
-            "Settings: synchronous_commit=OFF | if_exists=%s | batch_size=%s",
-            self.options.get("if_exists", "replace"),
-            DB_BATCH_SIZE,
-        )
+        logger.debug("Settings: synchronous_commit=OFF | if_exists=%s", self.options.get("if_exists", "replace"))
         logger.info("─" * 60)
+
+        tmp_path: str | None = None
 
         try:
             cur = conn.cursor()
@@ -54,77 +54,76 @@ class DatabaseOutput(Output):
             if self.options.get("if_exists", "replace") == "replace":
                 cur.execute(f"DROP TABLE IF EXISTS {name}")
 
-            logger.info("Executing query...")
-            query_start = time.time()
-            result = source_database.execute(query)
-            columns = [desc[0].lower() for desc in result.description]
-            query_time = time.time() - query_start
-            logger.debug("Query executed — columns: %s (%.2fs)", columns, query_time)
-
+            # Obtém schema sem buscar dados
+            schema = source_database.execute(f"SELECT * FROM ({query}) __q LIMIT 0")
+            columns = [desc[0].lower() for desc in schema.description]
             columns_def = ", ".join([f'"{col}" TEXT' for col in columns])
             cur.execute(f"CREATE TABLE {name} ({columns_def})")
             conn.commit()
 
+            # DuckDB exporta diretamente para CSV — sem loop Python
+            tmp_fd, tmp_path = tempfile.mkstemp(suffix=".csv")
+            os.close(tmp_fd)
+            duckdb_path = tmp_path.replace("\\", "/")
+
             transfer_start = time.time()
-            logger.info("Transferring data in batches of %s rows...", f"{DB_BATCH_SIZE:,}")
 
-            batch_num = 0
-            total_rows = 0
-            data_size = 0
+            logger.info("Exporting from DuckDB...")
+            export_start = time.time()
+            source_database.execute(f"COPY ({query}) TO '{duckdb_path}' (FORMAT CSV, HEADER FALSE, NULL '\\N')")
+            export_time = time.time() - export_start
+            file_size = os.path.getsize(tmp_path)
+            logger.debug("DuckDB export: %.2f MB in %.2fs", file_size / (1024 * 1024), export_time)
 
-            with tqdm(desc=name, unit="batch", leave=False) as pbar:
-                while True:
-                    rows = result.fetchmany(DB_BATCH_SIZE)
-                    if not rows:
-                        break
+            # PostgreSQL importa via streaming do arquivo
+            columns_sql = ", ".join(f'"{col}"' for col in columns)
+            logger.info("Importing to PostgreSQL...")
+            with tqdm(desc=name, unit="B", unit_scale=True, unit_divisor=1024, total=file_size, leave=False) as pbar:
 
-                    batch_num += 1
-                    total_rows += len(rows)
+                class _ProgressReader:
+                    def __init__(self, f: Any, pb: Any) -> None:
+                        self._f = f
+                        self._pb = pb
 
-                    output = io.StringIO()
-                    for row in rows:
-                        line = "\t".join(["\\N" if v is None else str(v) for v in row])
-                        data_size += len(line.encode("utf-8")) + 1
-                        output.write(line + "\n")
+                    def read(self, size: int = -1) -> str:
+                        chunk: str = self._f.read(size)
+                        self._pb.update(len(chunk.encode("utf-8")))
+                        return chunk
 
-                    output.seek(0)
+                with open(tmp_path, encoding="utf-8") as f:
+                    cur.copy_expert(  # type: ignore[attr-defined]
+                        f"COPY {name} ({columns_sql}) FROM STDIN WITH (FORMAT CSV, NULL '\\N')",
+                        _ProgressReader(f, pbar),
+                    )
 
-                    cur.copy_from(output, name, sep="\t", null="\\N", columns=columns)  # type: ignore[attr-defined]
-                    conn.commit()
-
-                    pbar.update(1)
-                    pbar.set_postfix({"rows": f"{total_rows:,}"})
-
-            cur.execute(f"ANALYZE {name}")
             conn.commit()
 
-            transfer_time = time.time() - transfer_start
+            cur.execute(f"SELECT COUNT(*) FROM {name}")
+            total_rows = cur.fetchone()[0]  # type: ignore[index]
 
+            transfer_time = time.time() - transfer_start
+            file_size_mb = file_size / (1024 * 1024)
             avg_speed = total_rows / transfer_time if transfer_time > 0 else 0
-            data_size_mb = data_size / (1024 * 1024)
-            speed_mb_s = data_size_mb / transfer_time if transfer_time > 0 else 0
+            speed_mb_s = file_size_mb / transfer_time if transfer_time > 0 else 0
 
             logger.info("─" * 60)
             logger.info("Transfer completed: %s", name)
-            logger.info("  Total records:     %s", f"{total_rows:,}")
-            logger.info("  Data size:         %.2f MB", data_size_mb)
-            logger.info("  Batches processed: %d", batch_num)
-            logger.info("  Transfer time:     %.2fs", transfer_time)
-            logger.info("  Average speed:     %s rows/s (%.2f MB/s)", f"{avg_speed:,.0f}", speed_mb_s)
+            logger.info("  Total records:  %s", f"{total_rows:,}")
+            logger.info("  Data size:      %.2f MB", file_size_mb)
+            logger.info("  Transfer time:  %.2fs", transfer_time)
+            logger.info("  Average speed:  %s rows/s (%.2f MB/s)", f"{avg_speed:,.0f}", speed_mb_s)
 
         except OmniQueryError:
             raise
         except Exception as e:
             logger.error("ERROR transferring data for %s: %s", name, e)
-            if "total_rows" in locals():
-                logger.error("  Records processed before error: %s", f"{total_rows:,}")
-            if "batch_num" in locals():
-                logger.error("  Batches completed before error: %d", batch_num)
             raise OutputError(f"Failed to transfer data to table '{name}'") from e
 
         finally:
             cur.close()
             conn.close()
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
 
     @db_retry
     def _get_engine(self) -> Engine:
