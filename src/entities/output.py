@@ -56,7 +56,7 @@ class DatabaseOutput(Output):
             schema = source_database.execute(f"SELECT * FROM ({query}) __q LIMIT 0")
             columns = [desc[0].lower() for desc in schema.description]
             columns_def = ", ".join([f'"{col}" TEXT' for col in columns])
-            cur.execute(f"CREATE TABLE {name} ({columns_def})")
+            cur.execute(f"CREATE UNLOGGED TABLE {name} ({columns_def})")
             conn.commit()
 
             # DuckDB exporta diretamente para CSV — sem loop Python
