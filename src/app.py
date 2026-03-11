@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 from typing import Any
 
@@ -20,7 +21,15 @@ class App:
             raise ValueError("Pipeline argument is required")
 
         try:
-            self.pipeline = Pipeline(**self.load_pipeline(), **kwargs)
+            raw = self.load_pipeline()
+            pipeline_params: dict[str, Any] = kwargs.get("pipeline_params", {}) or {}
+            if pipeline_params:
+                params_str = {
+                    k: v.isoformat() if hasattr(v, "isoformat") else str(v) for k, v in pipeline_params.items()
+                }
+                raw = self._substitute_parameters(raw, params_str)
+                logger.debug("Parâmetros aplicados: %s", params_str)
+            self.pipeline = Pipeline(**raw, **kwargs)
         except ValidationError as e:
             errors = e.errors()
             logger.error("Pipeline YAML inválido — %d erro(s) encontrado(s):", len(errors))
@@ -35,6 +44,24 @@ class App:
                 return yaml.safe_load(f)  # type: ignore[no-any-return]
         else:
             raise ValueError("Invalid type for pipeline argument")
+
+    def _substitute_parameters(self, data: Any, params: dict[str, str]) -> Any:
+        """Substitui {{ param }} nos valores de string do pipeline recursivamente."""
+
+        def replace_match(match: re.Match) -> str:  # type: ignore[type-arg]
+            key = str(match.group(1)).strip()
+            if key not in params:
+                logger.warning("Parâmetro '{{ %s }}' não foi fornecido via CLI", key)
+                return str(match.group(0))
+            return params[key]
+
+        if isinstance(data, str):
+            return re.sub(r"\{\{\s*([^}]+)\s*\}\}", replace_match, data)
+        if isinstance(data, dict):
+            return {k: self._substitute_parameters(v, params) for k, v in data.items()}
+        if isinstance(data, list):
+            return [self._substitute_parameters(item, params) for item in data]
+        return data
 
     def pipeline_parameters(self) -> dict:  # type: ignore[type-arg]
         """Retorna os parâmetros do pipeline, se existirem."""

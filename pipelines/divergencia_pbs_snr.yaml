@@ -38,8 +38,8 @@ loads:
                                                                           AND F.XML_nNF_B08     = A.NF_NUMERO
               WHERE D.BASE_ORIGEM = 1
                 AND F.STATUS = 4
-                AND CAST(A.EMISSAO AS DATE) >= '2025-05-01'
-                AND CAST(A.EMISSAO AS DATE) < '2025-06-01'
+                AND CAST(A.EMISSAO AS DATE) >= '{{ data_inicio }}'
+                AND CAST(A.EMISSAO AS DATE) < '{{ data_fim }}'
         options:
           if_exists: replace
       - alias: nf_faturamento_devolucoes
@@ -63,8 +63,8 @@ loads:
           JOIN EMPRESAS_USUARIAS                         C WITH(NOLOCK) ON C.EMPRESA_USUARIA          = A.EMPRESA
           JOIN EMPRESAS_DEPARA                           D WITH(NOLOCK) ON D.EMPRESA_USUARIA          = A.EMPRESA
               WHERE A.PROCESSAR = 'S'
-                AND CAST(A.EMISSAO AS DATE) >= '2025-05-01'
-                AND CAST(A.EMISSAO AS DATE) < '2025-06-01'
+                AND CAST(A.EMISSAO AS DATE) >= '{{ data_inicio }}'
+                AND CAST(A.EMISSAO AS DATE) < '{{ data_fim }}'
         options:
           if_exists: replace
       - alias: nf_compras
@@ -87,8 +87,8 @@ loads:
           JOIN NF_COMPRA_TOTAIS                          B WITH(NOLOCK) ON B.NF_COMPRA           = A.NF_COMPRA
           JOIN EMPRESAS_USUARIAS                         C WITH(NOLOCK) ON C.EMPRESA_USUARIA     = A.EMPRESA
           JOIN EMPRESAS_DEPARA                           D WITH(NOLOCK) ON D.EMPRESA_USUARIA     = A.EMPRESA
-          AND CAST(A.MOVIMENTO AS DATE) >= '2025-05-01'
-          AND CAST(A.MOVIMENTO AS DATE) < '2025-06-01'
+          AND CAST(A.MOVIMENTO AS DATE) >= '{{ data_inicio }}'
+          AND CAST(A.MOVIMENTO AS DATE) < '{{ data_fim }}'
         options:
           if_exists: replace
       - alias: nf_compras_devolucoes
@@ -116,8 +116,8 @@ loads:
                                                                   AND F.XML_nNF_B08     = A.NF_NUMERO
           WHERE D.BASE_ORIGEM = 1
                 AND F.STATUS = 4
-                AND CAST(A.EMISSAO AS DATE) >= '2025-05-01'
-                AND CAST(A.EMISSAO AS DATE) < '2025-06-01'
+                AND CAST(A.EMISSAO AS DATE) >= '{{ data_inicio }}'
+                AND CAST(A.EMISSAO AS DATE) < '{{ data_fim }}'
         options:
           if_exists: replace
   - type: database
@@ -138,8 +138,8 @@ loads:
           WHERE
             CODEMP = 2
             -- AND CODFIL IN(1,2,3,4,5,6,7,9,10,11,12,13,14,15,16)
-            AND DATEMI >= TO_DATE('2025-05-01', 'YYYY-MM-DD')
-            AND DATEMI < TO_DATE('2025-06-01', 'YYYY-MM-DD')
+            AND DATEMI >= TO_DATE('{{ data_inicio }}', 'YYYY-MM-DD')
+            AND DATEMI < TO_DATE('{{ data_fim }}', 'YYYY-MM-DD')
       - alias: compras_senior
         description: Consulta de compras da Senior
         type: inline
@@ -155,8 +155,8 @@ loads:
           WHERE
             CODEMP = 2
             -- AND CODFIL IN(1,2,3,4,5,6,7,9,10,11,12,13,14,15,16)
-            AND DATENT >= TO_DATE('2025-05-01', 'YYYY-MM-DD')
-            AND DATENT < TO_DATE('2025-06-01', 'YYYY-MM-DD')
+            AND DATENT >= TO_DATE('{{ data_inicio }}', 'YYYY-MM-DD')
+            AND DATENT < TO_DATE('{{ data_fim }}', 'YYYY-MM-DD')
 outputs:
   - name: divergencia_saidas
     type: database
