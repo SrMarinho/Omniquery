@@ -1,5 +1,4 @@
 import logging
-from threading import Thread
 from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
@@ -18,36 +17,13 @@ class Pipeline(BaseModel):
     loads: list[Loader] = Field(default=[])
     outputs: list[Output] = Field(default=[])
 
-    def _run_loads(self) -> None:
+    def run(self) -> None:
         if self.name:
             logger.info("Running pipeline: %s", self.name)
-        loads_theads = []
-        for load in self.loads:
-            t = Thread(target=load.run)
-            loads_theads.append(t)
-            t.start()
-
-        for thread in loads_theads:
-            thread.join()
-
-    def _run_outputs(self) -> None:
-        outputs_threads: list[Thread] = []
-        for output in self.outputs:
-            t = Thread(target=output.run)
-            outputs_threads.append(t)
-            t.start()
-
-        for thread in outputs_threads:
-            thread.join()
-
-    def run(self) -> None:
         for load in self.loads:
             load.run()
-        # self._run_loads()
-
         for output in self.outputs:
             output.run()
-        # self._run_outputs()
 
     @model_validator(mode="before")
     @classmethod
