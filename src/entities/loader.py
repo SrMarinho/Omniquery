@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.engine import Engine, create_engine
 
 from src.config import memory_database
+from src.config.settings import DB_CHUNK_SIZE, DB_MEMORY_LIMIT, DB_THREADS
 from src.entities.table import Table
 from src.utils.database_config_reader import get_database_config
 from src.utils.retry import db_retry
@@ -87,11 +88,11 @@ class DatabaseLoader(Loader):
     def _transfer(self, source_engine: Engine, to_engine: DuckDBPyConnection, table: Table) -> None:
         """Transfers data from a SQLAlchemy engine to DuckDB."""
 
-        to_engine.execute("PRAGMA threads=4")
-        to_engine.execute("PRAGMA memory_limit='4GB'")
+        to_engine.execute(f"PRAGMA threads={DB_THREADS}")
+        to_engine.execute(f"PRAGMA memory_limit='{DB_MEMORY_LIMIT}'")
 
         logger.info("Starting transfer: %s → DuckDB [table: %s]", self.source, table.alias)
-        logger.debug("Settings: threads=4 | memory_limit=4GB")
+        logger.debug("Settings: threads=%d | memory_limit=%s", DB_THREADS, DB_MEMORY_LIMIT)
         logger.info("─" * 60)
 
         duck_conn = to_engine
@@ -100,11 +101,9 @@ class DatabaseLoader(Loader):
 
         try:
             query = table.content
-            chunk_size = 500000
-
             first_chunk = True
 
-            for i, chunk_df in enumerate(pd.read_sql(query, source_engine, chunksize=chunk_size), 1):
+            for i, chunk_df in enumerate(pd.read_sql(query, source_engine, chunksize=DB_CHUNK_SIZE), 1):
                 chunk_start = time.time()
 
                 chunk_df.columns = chunk_df.columns.str.lower()

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.engine import Engine, create_engine
 
 from src.config import memory_database
+from src.config.settings import DB_BATCH_SIZE, FILE_CHUNK_SIZE
 from src.utils.database_config_reader import get_database_config
 from src.utils.retry import db_retry
 
@@ -34,15 +35,13 @@ class DatabaseOutput(Output):
         """
         Transfere dados do DuckDB para PostgreSQL em batches usando fetchmany.
         """
-        BATCH_SIZE = 500000
-
         conn = output_database.raw_connection()
 
         logger.info("Starting transfer: DuckDB → PostgreSQL [table: %s]", name)
         logger.debug(
             "Settings: synchronous_commit=OFF | if_exists=%s | batch_size=%s",
             self.options.get("if_exists", "replace"),
-            BATCH_SIZE,
+            DB_BATCH_SIZE,
         )
         logger.info("─" * 60)
 
@@ -65,14 +64,14 @@ class DatabaseOutput(Output):
             conn.commit()
 
             transfer_start = time.time()
-            logger.info("Transferring data in batches of %s rows...", f"{BATCH_SIZE:,}")
+            logger.info("Transferring data in batches of %s rows...", f"{DB_BATCH_SIZE:,}")
 
             batch_num = 0
             total_rows = 0
             data_size = 0
 
             while True:
-                rows = result.fetchmany(BATCH_SIZE)
+                rows = result.fetchmany(DB_BATCH_SIZE)
                 if not rows:
                     break
 
@@ -158,10 +157,8 @@ class FileOutput(Output):
         filepath = Path(file_path)
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
-        chunk_size = 100000
-
         logger.info("Starting transfer: DuckDB → CSV [file: %s]", filepath.name)
-        logger.debug("Settings: chunk_size=%s | location=%s", f"{chunk_size:,}", file_path)
+        logger.debug("Settings: chunk_size=%s | location=%s", f"{FILE_CHUNK_SIZE:,}", file_path)
         logger.info("─" * 60)
 
         total_rows = 0
@@ -174,7 +171,7 @@ class FileOutput(Output):
 
         try:
             while True:
-                rows = cursor.fetchmany(chunk_size)
+                rows = cursor.fetchmany(FILE_CHUNK_SIZE)
                 if not rows:
                     break
 
