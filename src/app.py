@@ -86,20 +86,26 @@ class App:
                 logger.info("      • %s (%s)", param.name, param.type)
 
     def run(self) -> None:
+        name = self.pipeline.name or "pipeline"
+        tag = f"[pipeline:{name}]"
+
         if self.dry_run:
-            logger.info("Modo dry-run: pipeline validado com sucesso, nenhuma execução será feita.")
+            logger.info("%s Dry-run — valid, no execution", tag)
             self._print_dry_run_summary()
             memory_database.close()
             return
 
-        logger.info("App is running")
+        n_loads = len(self.pipeline.loads)
+        n_outputs = len(self.pipeline.outputs)
+        logger.info("%s Starting — %d loader(s), %d output(s)", tag, n_loads, n_outputs)
+
         start_time = time.time()
         try:
             self.pipeline.run()
         except Exception as e:
-            logger.error("Error running pipeline: %s", e)
+            logger.error("%s Failed — %s", tag, e)
             raise
         finally:
             total_time = time.time() - start_time
-            logger.info("Pipeline execution completed in %.2f seconds", total_time)
+            logger.info("%s Completed in %.2fs", tag, total_time)
             memory_database.close()

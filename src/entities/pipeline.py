@@ -18,8 +18,6 @@ class Pipeline(BaseModel):
     outputs: list[Output] = Field(default=[])
 
     def run(self) -> None:
-        if self.name:
-            logger.info("Running pipeline: %s", self.name)
         for load in self.loads:
             load.run()
         for output in self.outputs:

@@ -39,13 +39,11 @@ class DatabaseOutput(Output):
         Transfere dados do DuckDB para PostgreSQL via arquivo CSV temporário.
         DuckDB exporta nativamente (sem serialização Python), PostgreSQL importa via COPY.
         """
+        tag = f"[out:{name}]"
         conn = output_database.raw_connection()
-
-        logger.info("Starting transfer: DuckDB → PostgreSQL [table: %s]", name)
-        logger.debug("Settings: synchronous_commit=OFF | if_exists=%s", self.options.get("if_exists", "replace"))
-        logger.info("─" * 60)
-
         tmp_path: str | None = None
+
+        logger.debug("%s if_exists=%s", tag, self.options.get("if_exists", "replace"))
 
         try:
             cur = conn.cursor()
@@ -68,16 +66,16 @@ class DatabaseOutput(Output):
 
             transfer_start = time.time()
 
-            logger.info("Exporting from DuckDB...")
+            logger.info("%s Exporting from DuckDB...", tag)
             export_start = time.time()
             source_database.execute(f"COPY ({query}) TO '{duckdb_path}' (FORMAT CSV, HEADER FALSE, NULL '\\N')")
             export_time = time.time() - export_start
             file_size = os.path.getsize(tmp_path)
-            logger.debug("DuckDB export: %.2f MB in %.2fs", file_size / (1024 * 1024), export_time)
+            logger.debug("%s DuckDB export — %.2f MB in %.2fs", tag, file_size / (1024 * 1024), export_time)
 
             # PostgreSQL importa via streaming do arquivo
             columns_sql = ", ".join(f'"{col}"' for col in columns)
-            logger.info("Importing to PostgreSQL...")
+            logger.info("%s Importing to PostgreSQL...", tag)
             with tqdm(desc=name, unit="B", unit_scale=True, unit_divisor=1024, total=file_size, leave=False) as pbar:
 
                 class _ProgressReader:
@@ -106,17 +104,20 @@ class DatabaseOutput(Output):
             avg_speed = total_rows / transfer_time if transfer_time > 0 else 0
             speed_mb_s = file_size_mb / transfer_time if transfer_time > 0 else 0
 
-            logger.info("─" * 60)
-            logger.info("Transfer completed: %s", name)
-            logger.info("  Total records:  %s", f"{total_rows:,}")
-            logger.info("  Data size:      %.2f MB", file_size_mb)
-            logger.info("  Transfer time:  %.2fs", transfer_time)
-            logger.info("  Average speed:  %s rows/s (%.2f MB/s)", f"{avg_speed:,.0f}", speed_mb_s)
+            logger.info(
+                "%s Done — %s rows | %.2f MB | %.2fs | %s rows/s (%.2f MB/s)",
+                tag,
+                f"{total_rows:,}",
+                file_size_mb,
+                transfer_time,
+                f"{avg_speed:,.0f}",
+                speed_mb_s,
+            )
 
         except OmniQueryError:
             raise
         except Exception as e:
-            logger.error("ERROR transferring data for %s: %s", name, e)
+            logger.error("%s Failed — %s", tag, e)
             raise OutputError(f"Failed to transfer data to table '{name}'") from e
 
         finally:
@@ -135,25 +136,20 @@ class DatabaseOutput(Output):
 
     def run(self) -> None:
         """Executa a transferência de dados do DuckDB para o banco de dados de destino."""
+        tag = f"[out:{self.name}]"
         job_start = time.time()
 
-        logger.info("─" * 60)
-        logger.info("Starting job: %s → %s", self.output_database, self.name)
-        logger.info("─" * 60)
+        logger.info("%s -> %s", tag, self.output_database)
 
         try:
             output_engine = self._get_engine()
-
             self._transfer(memory_database, output_engine, self.name, self.query)
-
-            job_time = time.time() - job_start
-            logger.info("Job completed: %s › %s (%.2fs)", self.output_database, self.name, job_time)
 
         except OmniQueryError:
             raise
         except Exception as e:
-            job_time = time.time() - job_start
-            logger.error("JOB FAILED: %s › %s — %s (%.2fs)", self.output_database, self.name, e, job_time)
+            elapsed = time.time() - job_start
+            logger.error("%s Failed — %s (%.2fs)", tag, e, elapsed)
             raise OutputError(f"Job failed for '{self.name}'") from e
 
 
@@ -170,11 +166,10 @@ class FileOutput(Output):
         ext = filepath.suffix.lower()
         is_excel = ext in (".xlsx", ".xls")
         fmt_label = "Excel" if is_excel else "CSV"
+        tag = f"[out:{filepath.name}]"
 
-        logger.info("Starting transfer: DuckDB → %s [file: %s]", fmt_label, filepath.name)
-        if not is_excel:
-            logger.debug("Settings: chunk_size=%s | location=%s", f"{FILE_CHUNK_SIZE:,}", file_path)
-        logger.info("─" * 60)
+        logger.info("%s Writing %s...", tag, fmt_label)
+        logger.debug("%s chunk_size=%s | path=%s", tag, f"{FILE_CHUNK_SIZE:,}", file_path)
 
         total_rows = 0
         transfer_start = time.time()
@@ -184,7 +179,6 @@ class FileOutput(Output):
 
         try:
             if is_excel:
-                # Excel doesn't support append mode — load everything into memory
                 all_rows = cursor.fetchall()
                 df = pd.DataFrame(all_rows, columns=columns)
                 df.columns = df.columns.str.lower()
@@ -223,17 +217,16 @@ class FileOutput(Output):
 
                         chunk_time = time.time() - chunk_start
                         total_rows += chunk_rows
-
                         pbar.update(1)
                         pbar.set_postfix({"rows": f"{total_rows:,}", "op": operation})
                         logger.debug(
-                            "Batch #%2d %-10s : %10s rows  %.2fs",
+                            "%s chunk #%d %s — %s rows in %.2fs",
+                            tag,
                             chunk_count,
                             operation,
                             f"{chunk_rows:,}",
                             chunk_time,
                         )
-
                         del chunk_df
 
             transfer_time = time.time() - transfer_start
@@ -243,42 +236,41 @@ class FileOutput(Output):
                 avg_speed = total_rows / transfer_time if transfer_time > 0 else 0
                 file_size_mb = file_size / (1024 * 1024)
                 speed_mb_s = file_size_mb / transfer_time if transfer_time > 0 else 0
-
-                logger.info("─" * 60)
-                logger.info("Transfer completed: %s", filepath.name)
-                logger.info("  Total records:    %s", f"{total_rows:,}")
-                logger.info("  File size:        %.2f MB", file_size_mb)
-                logger.info("  Transfer time:    %.2fs", transfer_time)
-                logger.info("  Average speed:    %s rows/s (%.2f MB/s)", f"{avg_speed:,.0f}", speed_mb_s)
+                logger.info(
+                    "%s Done — %s rows | %.2f MB | %.2fs | %s rows/s (%.2f MB/s)",
+                    tag,
+                    f"{total_rows:,}",
+                    file_size_mb,
+                    transfer_time,
+                    f"{avg_speed:,.0f}",
+                    speed_mb_s,
+                )
             else:
-                logger.warning("No data transferred for %s", filepath.name)
+                logger.warning("%s No data written", tag)
 
         except OmniQueryError:
             raise
         except Exception as e:
-            logger.error(
-                "ERROR transferring data to %s: %s (records processed: %s)", filepath.name, e, f"{total_rows:,}"
-            )
+            logger.error("%s Failed — %s (rows so far: %s)", tag, e, f"{total_rows:,}")
             if filepath.exists() and total_rows == 0:
                 filepath.unlink()
-                logger.info("Removed incomplete file: %s", filepath.name)
+                logger.info("%s Removed incomplete file", tag)
             raise OutputError(f"Failed to write file '{filepath.name}'") from e
 
     def run(self) -> None:
-        """Executa a transferência de dados."""
+        tag = f"[out:{Path(self.name).name}]"
+        job_start = time.time()
 
-        logger.info("─" * 60)
-        logger.info("Starting job: %s", self.name)
-        logger.info("─" * 60)
+        logger.info("%s Writing file...", tag)
 
         try:
             self._transfer(memory_database, self.name, self.query)
-            logger.info("Job completed: %s", self.name)
 
         except OmniQueryError:
             raise
         except Exception as e:
-            logger.error("JOB FAILED: %s — %s", self.name, e)
+            elapsed = time.time() - job_start
+            logger.error("%s Failed — %s (%.2fs)", tag, e, elapsed)
             raise OutputError(f"Job failed for '{self.name}'") from e
 
 

@@ -44,63 +44,46 @@ class DatabaseLoader(Loader):
         return engine
 
     def run(self) -> None:
-        """Executa a transferência de dados da fonte para o DuckDB."""
+        tag = f"[load:{self.source}]"
         job_start = time.time()
 
-        logger.info("─" * 60)
-        logger.info("Starting bulk transfer from source: %s", self.source)
-        logger.info("Tables to process: %d", len(self.tables))
-        for i, table in enumerate(self.tables[:3], 1):
-            logger.info("  %d. %s", i, table.alias)
+        table_names = ", ".join(t.alias for t in self.tables[:3])
         if len(self.tables) > 3:
-            logger.info("  ... and %d more", len(self.tables) - 3)
-        logger.info("─" * 60)
+            table_names += f" +{len(self.tables) - 3}"
+        logger.info("%s Starting — %d table(s): %s", tag, len(self.tables), table_names)
 
         try:
             source_engine = self.get_engine(self.source)
-            logger.info("Source connection established: %s", self.source)
+            logger.debug("%s Connected to %s", tag, self.source)
 
             tables_processed = 0
-
             for table in self.tables:
-                table_start = time.time()
-                logger.info("Processing table: %s", table.alias)
-
                 self._transfer(source_engine, memory_database, table)
-
-                table_time = time.time() - table_start
                 tables_processed += 1
-                logger.info("Table completed: %s (%.2fs)", table.alias, table_time)
 
             total_time = time.time() - job_start
-
-            logger.info("─" * 60)
-            logger.info("BULK TRANSFER COMPLETED SUCCESSFULLY")
-            logger.info("  Source:           %s", self.source)
-            logger.info("  Tables processed: %d/%d", tables_processed, len(self.tables))
-            logger.info("  Total time:       %.2fs", total_time)
-            logger.info("─" * 60)
+            logger.info("%s Done — %d/%d tables | %.2fs", tag, tables_processed, len(self.tables), total_time)
 
         except OmniQueryError:
             raise
         except Exception as e:
-            job_time = time.time() - job_start
-            logger.error("BULK TRANSFER FAILED — source: %s, error: %s (%.2fs)", self.source, e, job_time)
+            elapsed = time.time() - job_start
+            logger.error("%s Failed — %s (%.2fs)", tag, e, elapsed)
             if "tables_processed" in locals():
-                logger.error("Tables processed before error: %d/%d", tables_processed, len(self.tables))
+                logger.error("%s Tables completed before error: %d/%d", tag, tables_processed, len(self.tables))
             raise LoaderError(f"Failed to load from source '{self.source}'") from e
 
     def _transfer(self, source_engine: Engine, to_engine: DuckDBPyConnection, table: Table) -> None:
-        """Transfers data from a SQLAlchemy engine to DuckDB."""
+        tag = f"[load:{self.source}]"
 
         to_engine.execute(f"PRAGMA threads={DB_THREADS}")
         to_engine.execute(f"PRAGMA memory_limit='{DB_MEMORY_LIMIT}'")
 
-        logger.info("Starting transfer: %s → DuckDB [table: %s]", self.source, table.alias)
-        logger.debug("Settings: threads=%d | memory_limit=%s", DB_THREADS, DB_MEMORY_LIMIT)
-        logger.info("─" * 60)
+        logger.info("%s %s — fetching...", tag, table.alias)
+        logger.debug(
+            "%s threads=%d | memory_limit=%s | chunk=%s", tag, DB_THREADS, DB_MEMORY_LIMIT, f"{DB_CHUNK_SIZE:,}"
+        )
 
-        duck_conn = to_engine
         total_rows = 0
         transfer_start = time.time()
 
@@ -109,55 +92,51 @@ class DatabaseLoader(Loader):
             first_chunk = True
             chunks = pd.read_sql(query, source_engine, chunksize=DB_CHUNK_SIZE)
 
-            with tqdm(desc=table.alias, unit="chunk", leave=False) as pbar:
+            with tqdm(desc=f"{self.source}/{table.alias}", unit="chunk", leave=False) as pbar:
                 for i, chunk_df in enumerate(chunks, 1):
                     chunk_start = time.time()
-
                     chunk_df.columns = chunk_df.columns.str.lower()
                     chunk_rows = len(chunk_df)
 
-                    if duck_conn:
-                        duck_conn.register("temp_df", chunk_df)
-
+                    if to_engine:
+                        to_engine.register("temp_df", chunk_df)
                         if first_chunk:
-                            duck_conn.execute(f"""
+                            to_engine.execute(f"""
                                 CREATE OR REPLACE TABLE {table.alias} AS
                                 SELECT * FROM temp_df
                             """)
                             first_chunk = False
                             operation = "Created"
                         else:
-                            duck_conn.execute(f"""
+                            to_engine.execute(f"""
                                 INSERT INTO {table.alias}
                                 SELECT * FROM temp_df
                             """)
                             operation = "Appended"
-
-                        duck_conn.unregister("temp_df")
+                        to_engine.unregister("temp_df")
 
                     chunk_time = time.time() - chunk_start
                     total_rows += chunk_rows
-
                     pbar.update(1)
                     pbar.set_postfix({"rows": f"{total_rows:,}", "op": operation})
-                    logger.debug("Batch #%2d %-10s : %10s rows  %.2fs", i, operation, f"{chunk_rows:,}", chunk_time)
-
+                    logger.debug(
+                        "%s %s chunk #%d: %s rows in %.2fs", tag, table.alias, i, f"{chunk_rows:,}", chunk_time
+                    )
                     del chunk_df
 
             transfer_time = time.time() - transfer_start
-
             avg_speed = total_rows / transfer_time if transfer_time > 0 else 0
-
-            logger.info("─" * 60)
-            logger.info("Transfer completed: %s", table.alias)
-            logger.info("  Total records:  %s", f"{total_rows:,}")
-            logger.info("  Transfer time:  %.2fs", transfer_time)
-            logger.info("  Average speed:  %s rows/s", f"{avg_speed:,.0f}")
+            logger.info(
+                "%s %s — %s rows | %.2fs | %s rows/s",
+                tag,
+                table.alias,
+                f"{total_rows:,}",
+                transfer_time,
+                f"{avg_speed:,.0f}",
+            )
 
         except Exception as e:
-            logger.error(
-                "ERROR transferring data for %s: %s (records processed: %s)", table.alias, e, f"{total_rows:,}"
-            )
+            logger.error("%s %s — Error: %s (rows so far: %s)", tag, table.alias, e, f"{total_rows:,}")
             raise LoaderError(f"Failed to transfer table '{table.alias}'") from e
 
 
@@ -165,7 +144,6 @@ class FileLoader(Loader):
     type: str = "file"
 
     def _transfer(self, source: str, to_engine: DuckDBPyConnection, table: Table) -> None:
-        """Transfers data from a file to DuckDB."""
         ext = Path(source).suffix.lower()
         if ext in (".xlsx", ".xls"):
             df = pd.read_excel(source)
@@ -180,10 +158,12 @@ class FileLoader(Loader):
         to_engine.unregister("temp_df")
 
     def run(self) -> None:
-        logger.info("Running loads from source: %s", self.source)
+        tag = f"[load:{Path(self.source).name}]"
+        logger.info("%s Loading from file: %s", tag, self.source)
         for table in self.tables:
             try:
                 self._transfer(self.source, memory_database, table)
+                logger.info("%s %s — loaded", tag, table.alias)
             except OmniQueryError:
                 raise
             except Exception as e:
