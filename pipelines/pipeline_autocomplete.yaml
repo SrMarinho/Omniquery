@@ -1,0 +1,24 @@
+name: teste_autocomplete
+description: Pipeline para testar autocomplete
+parameters:
+  - name: title
+    description: Título do pipeline
+    default: Teste Autocomplete
+    required: false
+    type: string
+loads:
+  - type: database
+    source: procfit
+    tables:
+      - alias: teste
+        type: inline
+        content: |
+          SELECT 1 AS id, 'Teste' AS nome
+        options:
+          if_exists: replace
+outputs:
+  - type: database
+    name: teste
+    query: SELECT * FROM teste
+    options:
+      if_exists: replace

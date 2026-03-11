@@ -55,7 +55,7 @@
         "type": {
           "type": "string",
           "description": "Tipo do valor esperado na CLI.",
-          "enum": ["string", "integer", "int", "float", "boolean", "bool", "date"],
+          "enum": ["string", "integer", "float", "boolean", "date"],
           "default": "string"
         },
         "description": {
@@ -142,12 +142,7 @@
         "source": {
           "type": "string",
           "description": "Nome do banco de dados conforme definido em databases.yaml.",
-          "examples": ["procfit", "postgresql", "senior"]
-        },
-        "database": {
-          "type": "string",
-          "description": "Banco DuckDB interno de destino (raramente necessário alterar).",
-          "default": "memory"
+          "examples": ["procfit", "senior"]
         },
         "tables": {
           "type": "array",
@@ -226,14 +221,7 @@
         },
         "query": {
           "type": "string",
-          "description": "Query SQL executada no DuckDB para gerar os dados de saída. Referencia os aliases definidos nos loads.",
-          "examples": ["SELECT * FROM vendas LEFT JOIN metas ON vendas.setor = metas.setor"]
-        },
-        "output_database": {
-          "type": "string",
-          "description": "Nome do banco de destino conforme definido em databases.yaml.",
-          "default": "postgresql",
-          "examples": ["postgresql", "destino_dw"]
+          "description": "Query SQL executada no DuckDB para gerar os dados de saída. Referencia os aliases definidos nos loads."
         },
         "options": {
           "type": "object",
