@@ -52,7 +52,7 @@ class TestTable:
         assert Table(alias="t").type == TableTypes.INLINE
 
     def test_aceita_type_inline_explícito(self):
-        t = Table(alias="t", type="inline")
+        t = Table(alias="t", type="inline")  # type: ignore[arg-type]
         assert t.type == TableTypes.INLINE
 
     def test_aceita_content(self):
@@ -190,23 +190,23 @@ class TestPipeline:
         assert p.name == "meu_pipeline"
 
     def test_model_validator_cria_file_loader(self):
-        p = Pipeline(loads=[{"type": "file", "source": "data.csv", "tables": [{"alias": "t1"}]}])
+        p = Pipeline(loads=[{"type": "file", "source": "data.csv", "tables": [{"alias": "t1"}]}])  # type: ignore[list-item]
         assert isinstance(p.loads[0], FileLoader)
 
     def test_model_validator_cria_database_loader(self):
-        p = Pipeline(loads=[{"type": "database", "source": "db", "tables": []}])
+        p = Pipeline(loads=[{"type": "database", "source": "db", "tables": []}])  # type: ignore[list-item]
         assert isinstance(p.loads[0], DatabaseLoader)
 
     def test_model_validator_cria_file_output(self):
-        p = Pipeline(outputs=[{"type": "file", "name": "out.csv", "query": "SELECT 1"}])
+        p = Pipeline(outputs=[{"type": "file", "name": "out.csv", "query": "SELECT 1"}])  # type: ignore[list-item]
         assert isinstance(p.outputs[0], FileOutput)
 
     def test_model_validator_cria_database_output(self):
-        p = Pipeline(outputs=[{"type": "database", "name": "tabela", "query": "SELECT 1"}])
+        p = Pipeline(outputs=[{"type": "database", "name": "tabela", "query": "SELECT 1"}])  # type: ignore[list-item]
         assert isinstance(p.outputs[0], DatabaseOutput)
 
     def test_parametros_sao_deserializados(self):
-        p = Pipeline(parameters=[{"name": "data_inicio", "type": "date", "required": True}])
+        p = Pipeline(parameters=[{"name": "data_inicio", "type": "date", "required": True}])  # type: ignore[list-item]
         assert isinstance(p.parameters[0], Parameter)
         assert p.parameters[0].required is True
 
