@@ -182,7 +182,12 @@ class FileLoader(Loader):
     def run(self) -> None:
         logger.info("Running loads from source: %s", self.source)
         for table in self.tables:
-            self._transfer(self.source, memory_database, table)
+            try:
+                self._transfer(self.source, memory_database, table)
+            except OmniQueryError:
+                raise
+            except Exception as e:
+                raise LoaderError(f"Failed to load table '{table.alias}' from file '{self.source}'") from e
 
 
 class LoaderFactory:
