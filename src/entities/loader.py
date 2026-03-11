@@ -138,7 +138,7 @@ class DatabaseLoader(Loader):
         """Leitura via connectorx → Arrow → DuckDB (sem serialização Python)."""
         logger.debug("%s %s — using connectorx + Arrow", tag, table.alias)
 
-        arrow_table: pa.Table = cx.read_sql(cx_url, table.content, return_type="arrow2")  # type: ignore[assignment]
+        arrow_table: pa.Table = cx.read_sql(cx_url, table.content, return_type="arrow")  # type: ignore[assignment]
         arrow_table = arrow_table.rename_columns([c.lower() for c in arrow_table.column_names])
 
         to_engine.register("temp_arrow", arrow_table)
