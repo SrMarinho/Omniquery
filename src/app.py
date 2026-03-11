@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 class App:
     def __init__(self, **kwargs: Any) -> None:
         self.pipeline_args = kwargs.get("pipeline", None)
+        self.dry_run: bool = bool(kwargs.get("dry_run", False))
         if not self.pipeline_args:
             raise ValueError("Pipeline argument is required")
 
@@ -39,7 +40,31 @@ class App:
         """Retorna os parâmetros do pipeline, se existirem."""
         return getattr(self.pipeline, "parameters", {})
 
+    def _print_dry_run_summary(self) -> None:
+        p = self.pipeline
+        logger.info("DRY RUN — pipeline: %s", p.name or "(sem nome)")
+        if p.description:
+            logger.info("  Descrição: %s", p.description)
+        logger.info("  Loaders (%d):", len(p.loads))
+        for loader in p.loads:
+            logger.info("    [%s] source=%s — %d tabela(s)", loader.type, loader.source, len(loader.tables))
+            for table in loader.tables:
+                logger.info("      • %s", table.alias)
+        logger.info("  Outputs (%d):", len(p.outputs))
+        for output in p.outputs:
+            logger.info("    [%s] name=%s", output.type, output.name)
+        if p.parameters:
+            logger.info("  Parâmetros (%d):", len(p.parameters))
+            for param in p.parameters:
+                logger.info("      • %s (%s)", param.name, param.type)
+
     def run(self) -> None:
+        if self.dry_run:
+            logger.info("Modo dry-run: pipeline validado com sucesso, nenhuma execução será feita.")
+            self._print_dry_run_summary()
+            memory_database.close()
+            return
+
         logger.info("App is running")
         start_time = time.time()
         try:

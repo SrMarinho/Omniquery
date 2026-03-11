@@ -41,6 +41,12 @@ def create_base_parser():
     )
 
     parser.add_argument("pipeline", nargs="?", help="Caminho para o arquivo YAML da pipeline")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Valida e exibe o pipeline sem executar loaders ou outputs",
+    )
 
     return parser
 
