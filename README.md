@@ -156,6 +156,8 @@ omniquery/
 ├── pipelines/                   # Definições de pipelines YAML
 ├── schemas/
 │   └── pipeline.schema.json     # JSON Schema para autocompletar no VS Code
+├── scripts/
+│   └── validate_pipelines.py    # Valida todos os pipelines contra o schema
 ├── data/                        # Arquivos de dados de entrada
 ├── outputs/                     # Arquivos de saída gerados
 ├── tests/
@@ -183,6 +185,16 @@ omniquery/
 └── pyproject.toml
 ```
 
+## CI/CD
+
+O GitHub Actions executa 3 jobs a cada push ou PR:
+
+| Job | O que faz |
+|---|---|
+| **Lint & Type Check** | Ruff (lint + format) e Mypy |
+| **Tests** | pytest com todos os testes unitários |
+| **Validate Pipeline YAMLs** | Valida todos os arquivos de `pipelines/` contra o JSON Schema — impede pipelines inválidos de chegarem em produção |
+
 ## Desenvolvimento
 
 ```bash
@@ -191,6 +203,9 @@ uv sync --group dev
 
 # Rodar testes
 uv run pytest tests/ -v
+
+# Validar pipelines localmente
+uv run python scripts/validate_pipelines.py
 
 # Lint
 uv run ruff check .
