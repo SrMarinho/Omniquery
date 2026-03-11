@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import sys
 from datetime import datetime
@@ -6,6 +7,8 @@ from datetime import datetime
 import yaml
 
 from src.config.settings import base_path
+
+logger = logging.getLogger(__name__)
 
 
 def get_pipelines():
@@ -123,15 +126,14 @@ def parse_args():
                     parser.print_help()
                     sys.exit(0)
             else:
-                print(f"Erro: Pipeline não encontrada: {pipeline_arg}")
-                print("\nPipelines disponíveis:")
+                logger.error("Pipeline não encontrada: %s", pipeline_arg)
                 pipelines = get_pipelines()
-                for p in pipelines:
-                    print(f"  - {p}")
+                if pipelines:
+                    logger.info("Pipelines disponíveis: %s", ", ".join(pipelines))
                 sys.exit(1)
 
         except Exception as e:
-            print(f"Erro ao carregar pipeline: {e}")
+            logger.error("Erro ao carregar pipeline: %s", e)
             sys.exit(1)
 
     args = parser.parse_args()
@@ -159,7 +161,7 @@ def parse_args():
             args.pipeline_params = pipeline_params
 
         except Exception as e:
-            print(f"Erro ao carregar pipeline: {e}")
+            logger.error("Erro ao carregar pipeline: %s", e)
             sys.exit(1)
 
     return args

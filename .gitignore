@@ -25,3 +25,5 @@ wheels/
 
 
 outputs/
+
+.claude/

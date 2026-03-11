@@ -1,3 +1,4 @@
+import logging
 import time
 from typing import Any
 
@@ -9,6 +10,8 @@ from sqlalchemy.engine import Engine, create_engine
 from src.config import memory_database
 from src.entities.table import Table
 from src.utils.database_config_reader import get_database_config
+
+logger = logging.getLogger(__name__)
 
 
 class Loader(BaseModel):
@@ -36,51 +39,45 @@ class DatabaseLoader(Loader):
         """Executa a transferência de dados da fonte para o DuckDB."""
         job_start = time.time()
 
-        print("─" * 60)
-        print(f"🚀 Starting bulk transfer from source: {self.source}")
-        print(f"📋 Tables to process: {len(self.tables)}")
+        logger.info("─" * 60)
+        logger.info("Starting bulk transfer from source: %s", self.source)
+        logger.info("Tables to process: %d", len(self.tables))
         for i, table in enumerate(self.tables[:3], 1):
-            print(f"   {i}. {table.alias}")
+            logger.info("  %d. %s", i, table.alias)
         if len(self.tables) > 3:
-            print(f"   ... and {len(self.tables) - 3} more")
-        print("─" * 60)
+            logger.info("  ... and %d more", len(self.tables) - 3)
+        logger.info("─" * 60)
 
         try:
             source_engine = self.get_engine(self.source)
-            print(f"✅ Source connection established: {self.source}")
+            logger.info("Source connection established: %s", self.source)
 
             tables_processed = 0
 
             for table in self.tables:
                 table_start = time.time()
-                print(f"\n📦 Processing table: {table.alias}")
+                logger.info("Processing table: %s", table.alias)
 
                 self._transfer(source_engine, memory_database, table)
 
                 table_time = time.time() - table_start
                 tables_processed += 1
-                print(f"  ✅ Table completed: {table.alias} ⏱️  {table_time:.2f}s")
+                logger.info("Table completed: %s (%.2fs)", table.alias, table_time)
 
             total_time = time.time() - job_start
 
-            print("─" * 60)
-            print("🎉 BULK TRANSFER COMPLETED SUCCESSFULLY!")
-            print("📊 Summary:")
-            print(f"   • Source:           {self.source}")
-            print(f"   • Tables processed: {tables_processed}/{len(self.tables)}")
-            print(f"   • Total time:       {total_time:>15.2f}s")
-            print("─" * 60)
+            logger.info("─" * 60)
+            logger.info("BULK TRANSFER COMPLETED SUCCESSFULLY")
+            logger.info("  Source:           %s", self.source)
+            logger.info("  Tables processed: %d/%d", tables_processed, len(self.tables))
+            logger.info("  Total time:       %.2fs", total_time)
+            logger.info("─" * 60)
 
         except Exception as e:
             job_time = time.time() - job_start
-            print("❌" * 30)
-            print("🔴 BULK TRANSFER FAILED")
-            print(f"⚠️  Source: {self.source}")
-            print(f"⚠️  Error: {str(e)}")
+            logger.error("BULK TRANSFER FAILED — source: %s, error: %s (%.2fs)", self.source, e, job_time)
             if 'tables_processed' in locals():
-                print(f"📋 Tables processed before error: {tables_processed}/{len(self.tables)}")
-            print(f"⏱️  Failed after: {job_time:.2f}s")
-            print("❌" * 30)
+                logger.error("Tables processed before error: %d/%d", tables_processed, len(self.tables))
             raise
 
     def _transfer(self, source_engine: Engine, to_engine: DuckDBPyConnection, table: Table) -> None:
@@ -89,13 +86,13 @@ class DatabaseLoader(Loader):
         to_engine.execute("PRAGMA threads=4")
         to_engine.execute("PRAGMA memory_limit='4GB'")
 
-        print(f"📤 Starting transfer: {self.source} ➔ DuckDB [Table: {table.alias}]")
-        print("⚙️  Settings: threads=4 | memory_limit=4GB")
-        print("─" * 60)
+        logger.info("Starting transfer: %s → DuckDB [table: %s]", self.source, table.alias)
+        logger.debug("Settings: threads=4 | memory_limit=4GB")
+        logger.info("─" * 60)
 
         duck_conn = to_engine
         total_rows = 0
-        transfer_start = time.time()  # ⬅️ Tempo da transferência
+        transfer_start = time.time()
 
         try:
             query = table.content
@@ -118,21 +115,20 @@ class DatabaseLoader(Loader):
                             SELECT * FROM temp_df
                         """)
                         first_chunk = False
-                        operation = "🆗 Created"
+                        operation = "Created"
                     else:
                         duck_conn.execute(f"""
                             INSERT INTO {table.alias}
                             SELECT * FROM temp_df
                         """)
-                        operation = "➕ Appended"
+                        operation = "Appended"
 
                     duck_conn.unregister('temp_df')
 
                 chunk_time = time.time() - chunk_start
                 total_rows += chunk_rows
 
-                print(f"  Batch #{i:2d} {operation:12s} : {chunk_rows:10,} rows "
-                    f"⏱️  {chunk_time:5.2f}s")
+                logger.info("  Batch #%2d %-10s : %10s rows  %.2fs", i, operation, f"{chunk_rows:,}", chunk_time)
 
                 del chunk_df
 
@@ -140,20 +136,14 @@ class DatabaseLoader(Loader):
 
             avg_speed = total_rows / transfer_time if transfer_time > 0 else 0
 
-            print("─" * 60)
-            print("✅ Transfer completed successfully!")
-            print(f"📊 Final summary for table {table.alias}:")
-            print(f"   • Total records:     {total_rows:>15,}")
-            print(f"   • Transfer time:     {transfer_time:>15.2f}s")
-            print(f"   • Average speed:     {avg_speed:>15,.0f} rows/s")
-            print("\n")
+            logger.info("─" * 60)
+            logger.info("Transfer completed: %s", table.alias)
+            logger.info("  Total records:  %s", f"{total_rows:,}")
+            logger.info("  Transfer time:  %.2fs", transfer_time)
+            logger.info("  Average speed:  %s rows/s", f"{avg_speed:,.0f}")
 
         except Exception as e:
-            print("❌" * 30)
-            print(f"🔴 ERROR transferring data for {table.alias}")
-            print(f"⚠️  Details: {str(e)}")
-            print(f"📋 Records processed before error: {total_rows:,}")
-            print("❌" * 30)
+            logger.error("ERROR transferring data for %s: %s (records processed: %s)", table.alias, e, f"{total_rows:,}")
 
 class FileLoader(Loader):
     type: str = "file"
@@ -170,7 +160,7 @@ class FileLoader(Loader):
         to_engine.unregister('temp_df')
 
     def run(self) -> None:
-        print(f"Running loads from source: {self.source}")
+        logger.info("Running loads from source: %s", self.source)
         for table in self.tables:
             self._transfer(self.source, memory_database, table)
 
