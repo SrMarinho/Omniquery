@@ -10,6 +10,7 @@ from sqlalchemy.engine import Engine, create_engine
 from src.config import memory_database
 from src.entities.table import Table
 from src.utils.database_config_reader import get_database_config
+from src.utils.retry import db_retry
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +30,14 @@ class DatabaseLoader(Loader):
     type: str = "database"
     database: str = "memory"
 
+    @db_retry
     def get_engine(self, database: str) -> Engine:
         config = get_database_config(database)
-
         connection_string: str = config["connection_string"]
-
-        return create_engine(connection_string)
+        engine = create_engine(connection_string)
+        with engine.connect():
+            pass
+        return engine
 
     def run(self) -> None:
         """Executa a transferência de dados da fonte para o DuckDB."""

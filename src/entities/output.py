@@ -11,6 +11,7 @@ from sqlalchemy.engine import Engine, create_engine
 
 from src.config import memory_database
 from src.utils.database_config_reader import get_database_config
+from src.utils.retry import db_retry
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +118,14 @@ class DatabaseOutput(Output):
             cur.close()
             conn.close()
 
+    @db_retry
+    def _get_engine(self) -> Engine:
+        output_connection_string: str = get_database_config(self.output_database)["connection_string"]
+        engine = create_engine(output_connection_string)
+        with engine.connect():
+            pass
+        return engine
+
     def run(self) -> None:
         """Executa a transferência de dados do DuckDB para o banco de dados de destino."""
         job_start = time.time()
@@ -126,8 +135,7 @@ class DatabaseOutput(Output):
         logger.info("─" * 60)
 
         try:
-            output_connection_string: str = get_database_config(self.output_database)["connection_string"]
-            output_engine = create_engine(output_connection_string)
+            output_engine = self._get_engine()
 
             self._transfer(memory_database, output_engine, self.name, self.query)
 

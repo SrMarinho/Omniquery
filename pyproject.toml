@@ -18,6 +18,7 @@ dependencies = [
     "pytz>=2025.2",
     "pyyaml>=6.0.3",
     "sqlalchemy>=2.0.46",
+    "tenacity>=9.0.0",
     "tqdm>=4.67.1",
     "types-pyyaml>=6.0.12.20250915",
     "types-sqlalchemy>=1.4.53.38",
