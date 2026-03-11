@@ -56,10 +56,12 @@ def setup_pipeline_arguments(parser, pipeline_loaded, pipeline_name):
     Configura os argumentos específicos da pipeline
     """
     TYPE_MAP = {
-        "str": str,
+        "string": str,
         "int": int,
+        "integer": int,
         "float": float,
         "bool": lambda x: x.lower() in ("true", "1", "yes", "y"),
+        "boolean": lambda x: x.lower() in ("true", "1", "yes", "y"),
         "date": lambda x: datetime.strptime(x, "%Y-%m-%d").date(),
     }
 
