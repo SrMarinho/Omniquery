@@ -1,6 +1,7 @@
 import logging
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,7 @@ from sqlalchemy.engine.url import make_url
 from tqdm import tqdm
 
 from src.config import memory_database
-from src.config.settings import DB_CHUNK_SIZE, DB_MEMORY_LIMIT, DB_THREADS, ORACLE_ODBC_DRIVER
+from src.config.settings import DB_CHUNK_SIZE, DB_MEMORY_LIMIT, DB_THREADS, ORACLE_ODBC_DRIVER, PIPELINE_WORKERS
 from src.entities.table import Table
 from src.exceptions import LoaderError, OmniQueryError
 from src.utils.database_config_reader import get_database_config
@@ -117,10 +118,16 @@ class DatabaseLoader(Loader):
             source_engine = self.get_engine(self.source)
             logger.debug("%s Connected to %s", tag, self.source)
 
-            tables_processed = 0
-            for table in self.tables:
-                self._transfer(source_engine, memory_database, table)
-                tables_processed += 1
+            workers = min(PIPELINE_WORKERS, len(self.tables))
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = {
+                    executor.submit(self._transfer, source_engine, memory_database, table): table
+                    for table in self.tables
+                }
+                tables_processed = 0
+                for future in as_completed(futures):
+                    future.result()
+                    tables_processed += 1
 
             total_time = time.time() - job_start
             logger.info("%s Done — %d/%d tables | %.2fs", tag, tables_processed, len(self.tables), total_time)
