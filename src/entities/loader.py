@@ -6,6 +6,7 @@ import pandas as pd
 from duckdb import DuckDBPyConnection
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.engine import Engine, create_engine
+from tqdm import tqdm
 
 from src.config import memory_database
 from src.config.settings import DB_CHUNK_SIZE, DB_MEMORY_LIMIT, DB_THREADS
@@ -105,38 +106,42 @@ class DatabaseLoader(Loader):
         try:
             query = table.content
             first_chunk = True
+            chunks = pd.read_sql(query, source_engine, chunksize=DB_CHUNK_SIZE)
 
-            for i, chunk_df in enumerate(pd.read_sql(query, source_engine, chunksize=DB_CHUNK_SIZE), 1):
-                chunk_start = time.time()
+            with tqdm(desc=table.alias, unit="chunk", leave=False) as pbar:
+                for i, chunk_df in enumerate(chunks, 1):
+                    chunk_start = time.time()
 
-                chunk_df.columns = chunk_df.columns.str.lower()
-                chunk_rows = len(chunk_df)
+                    chunk_df.columns = chunk_df.columns.str.lower()
+                    chunk_rows = len(chunk_df)
 
-                if duck_conn:
-                    duck_conn.register("temp_df", chunk_df)
+                    if duck_conn:
+                        duck_conn.register("temp_df", chunk_df)
 
-                    if first_chunk:
-                        duck_conn.execute(f"""
-                            CREATE OR REPLACE TABLE {table.alias} AS
-                            SELECT * FROM temp_df
-                        """)
-                        first_chunk = False
-                        operation = "Created"
-                    else:
-                        duck_conn.execute(f"""
-                            INSERT INTO {table.alias}
-                            SELECT * FROM temp_df
-                        """)
-                        operation = "Appended"
+                        if first_chunk:
+                            duck_conn.execute(f"""
+                                CREATE OR REPLACE TABLE {table.alias} AS
+                                SELECT * FROM temp_df
+                            """)
+                            first_chunk = False
+                            operation = "Created"
+                        else:
+                            duck_conn.execute(f"""
+                                INSERT INTO {table.alias}
+                                SELECT * FROM temp_df
+                            """)
+                            operation = "Appended"
 
-                    duck_conn.unregister("temp_df")
+                        duck_conn.unregister("temp_df")
 
-                chunk_time = time.time() - chunk_start
-                total_rows += chunk_rows
+                    chunk_time = time.time() - chunk_start
+                    total_rows += chunk_rows
 
-                logger.info("  Batch #%2d %-10s : %10s rows  %.2fs", i, operation, f"{chunk_rows:,}", chunk_time)
+                    pbar.update(1)
+                    pbar.set_postfix({"rows": f"{total_rows:,}", "op": operation})
+                    logger.debug("Batch #%2d %-10s : %10s rows  %.2fs", i, operation, f"{chunk_rows:,}", chunk_time)
 
-                del chunk_df
+                    del chunk_df
 
             transfer_time = time.time() - transfer_start
 

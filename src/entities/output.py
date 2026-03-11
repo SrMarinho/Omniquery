@@ -8,6 +8,7 @@ import pandas as pd
 from duckdb import DuckDBPyConnection
 from pydantic import BaseModel, Field
 from sqlalchemy.engine import Engine, create_engine
+from tqdm import tqdm
 
 from src.config import memory_database
 from src.config.settings import DB_BATCH_SIZE, FILE_CHUNK_SIZE
@@ -71,24 +72,28 @@ class DatabaseOutput(Output):
             total_rows = 0
             data_size = 0
 
-            while True:
-                rows = result.fetchmany(DB_BATCH_SIZE)
-                if not rows:
-                    break
+            with tqdm(desc=name, unit="batch", leave=False) as pbar:
+                while True:
+                    rows = result.fetchmany(DB_BATCH_SIZE)
+                    if not rows:
+                        break
 
-                batch_num += 1
-                total_rows += len(rows)
+                    batch_num += 1
+                    total_rows += len(rows)
 
-                output = io.StringIO()
-                for row in rows:
-                    line = "\t".join(["\\N" if v is None else str(v) for v in row])
-                    data_size += len(line.encode("utf-8")) + 1
-                    output.write(line + "\n")
+                    output = io.StringIO()
+                    for row in rows:
+                        line = "\t".join(["\\N" if v is None else str(v) for v in row])
+                        data_size += len(line.encode("utf-8")) + 1
+                        output.write(line + "\n")
 
-                output.seek(0)
+                    output.seek(0)
 
-                cur.copy_from(output, name, sep="\t", null="\\N", columns=columns)  # type: ignore[attr-defined]
-                conn.commit()
+                    cur.copy_from(output, name, sep="\t", null="\\N", columns=columns)  # type: ignore[attr-defined]
+                    conn.commit()
+
+                    pbar.update(1)
+                    pbar.set_postfix({"rows": f"{total_rows:,}"})
 
             cur.execute(f"ANALYZE {name}")
             conn.commit()
@@ -176,34 +181,37 @@ class FileOutput(Output):
         columns = [desc[0] for desc in cursor.description]
 
         try:
-            while True:
-                rows = cursor.fetchmany(FILE_CHUNK_SIZE)
-                if not rows:
-                    break
+            with tqdm(desc=filepath.name, unit="chunk", leave=False) as pbar:
+                while True:
+                    rows = cursor.fetchmany(FILE_CHUNK_SIZE)
+                    if not rows:
+                        break
 
-                chunk_count += 1
-                chunk_start = time.time()
+                    chunk_count += 1
+                    chunk_start = time.time()
 
-                chunk_df = pd.DataFrame(rows, columns=columns)
-                chunk_df.columns = chunk_df.columns.str.lower()
-                chunk_rows = len(chunk_df)
+                    chunk_df = pd.DataFrame(rows, columns=columns)
+                    chunk_df.columns = chunk_df.columns.str.lower()
+                    chunk_rows = len(chunk_df)
 
-                if first_chunk:
-                    chunk_df.to_csv(filepath, index=False)
-                    operation = "Created"
-                    first_chunk = False
-                else:
-                    chunk_df.to_csv(filepath, mode="a", index=False, header=False)
-                    operation = "Appended"
+                    if first_chunk:
+                        chunk_df.to_csv(filepath, index=False)
+                        operation = "Created"
+                        first_chunk = False
+                    else:
+                        chunk_df.to_csv(filepath, mode="a", index=False, header=False)
+                        operation = "Appended"
 
-                chunk_time = time.time() - chunk_start
-                total_rows += chunk_rows
+                    chunk_time = time.time() - chunk_start
+                    total_rows += chunk_rows
 
-                logger.info(
-                    "  Batch #%2d %-10s : %10s rows  %.2fs", chunk_count, operation, f"{chunk_rows:,}", chunk_time
-                )
+                    pbar.update(1)
+                    pbar.set_postfix({"rows": f"{total_rows:,}", "op": operation})
+                    logger.debug(
+                        "Batch #%2d %-10s : %10s rows  %.2fs", chunk_count, operation, f"{chunk_rows:,}", chunk_time
+                    )
 
-                del chunk_df
+                    del chunk_df
 
             transfer_time = time.time() - transfer_start
 
