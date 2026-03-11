@@ -1,11 +1,14 @@
+import io
 import logging
 import os
-import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import pyarrow as pa
+import pyarrow.csv as pa_csv
 from duckdb import DuckDBPyConnection
 from pydantic import BaseModel, Field
 from sqlalchemy.engine import Engine, create_engine
@@ -83,12 +86,12 @@ class DatabaseOutput(Output):
 
     def _transfer(self, source_database: DuckDBPyConnection, output_database: Engine, name: str, query: str) -> None:
         """
-        Transfere dados do DuckDB para PostgreSQL via arquivo CSV temporário.
-        DuckDB exporta nativamente (sem serialização Python), PostgreSQL importa via COPY.
+        Transfere dados do DuckDB para PostgreSQL via pipe anônimo.
+        DuckDB → Arrow batches → CSV bytes → pipe → PostgreSQL COPY FROM STDIN.
+        Elimina I/O de disco e serialização Python linha a linha.
         """
         tag = f"[out:{name}]"
         conn = output_database.raw_connection()
-        tmp_path: str | None = None
 
         logger.debug("%s if_exists=%s", tag, self.options.get("if_exists", "replace"))
 
@@ -101,7 +104,7 @@ class DatabaseOutput(Output):
             if self.options.get("if_exists", "replace") == "replace":
                 cur.execute(f"DROP TABLE IF EXISTS {name}")
 
-            # Obtém schema com tipos reais — sem buscar dados
+            # Schema com tipos reais
             describe = source_database.execute(f"DESCRIBE SELECT * FROM ({query}) __q")
             schema_info = describe.fetchall()
             columns = [row[0].lower() for row in schema_info]
@@ -109,40 +112,39 @@ class DatabaseOutput(Output):
             cur.execute(f"CREATE UNLOGGED TABLE {name} ({columns_def})")
             conn.commit()
 
-            # DuckDB exporta diretamente para CSV — sem loop Python
-            tmp_fd, tmp_path = tempfile.mkstemp(suffix=".csv")
-            os.close(tmp_fd)
-            duckdb_path = tmp_path.replace("\\", "/")
-
+            columns_sql = ", ".join(f'"{col}"' for col in columns)
             transfer_start = time.time()
 
-            logger.info("%s Exporting from DuckDB...", tag)
-            export_start = time.time()
-            source_database.execute(f"COPY ({query}) TO '{duckdb_path}' (FORMAT CSV, HEADER FALSE, NULL '\\N')")
-            export_time = time.time() - export_start
-            file_size = os.path.getsize(tmp_path)
-            logger.debug("%s DuckDB export — %.2f MB in %.2fs", tag, file_size / (1024 * 1024), export_time)
+            logger.info("%s Streaming DuckDB → PostgreSQL...", tag)
 
-            # PostgreSQL importa via streaming do arquivo
-            columns_sql = ", ".join(f'"{col}"' for col in columns)
-            logger.info("%s Importing to PostgreSQL...", tag)
-            with tqdm(desc=name, unit="B", unit_scale=True, unit_divisor=1024, total=file_size, leave=False) as pbar:
+            # Pipe anônimo: writer thread (DuckDB → CSV bytes) → reader (PostgreSQL COPY)
+            r_fd, w_fd = os.pipe()
+            write_error: list[Exception] = []
+            write_opts = pa_csv.WriteOptions(include_header=False, null_string="\\N")
 
-                class _ProgressReader:
-                    def __init__(self, f: Any, pb: Any) -> None:
-                        self._f = f
-                        self._pb = pb
+            def _write_batches() -> None:
+                try:
+                    with os.fdopen(w_fd, "wb") as wf:
+                        reader = source_database.execute(query).fetch_record_batch(rows_per_batch=500_000)
+                        for batch in reader:
+                            buf = io.BytesIO()
+                            pa_csv.write_csv(pa.Table.from_batches([batch]), buf, write_options=write_opts)
+                            wf.write(buf.getvalue())
+                except Exception as exc:
+                    write_error.append(exc)
 
-                    def read(self, size: int = -1) -> str:
-                        chunk: str = self._f.read(size)
-                        self._pb.update(len(chunk.encode("utf-8")))
-                        return chunk
+            writer = threading.Thread(target=_write_batches, daemon=True)
+            writer.start()
 
-                with open(tmp_path, encoding="utf-8") as f:
-                    cur.copy_expert(  # type: ignore[attr-defined]
-                        f"COPY {name} ({columns_sql}) FROM STDIN WITH (FORMAT CSV, NULL '\\N')",
-                        _ProgressReader(f, pbar),
-                    )
+            with os.fdopen(r_fd, "rb") as rf:
+                cur.copy_expert(  # type: ignore[attr-defined]
+                    f"COPY {name} ({columns_sql}) FROM STDIN WITH (FORMAT CSV, NULL '\\N')",
+                    rf,
+                )
+
+            writer.join()
+            if write_error:
+                raise write_error[0]
 
             conn.commit()
 
@@ -150,18 +152,14 @@ class DatabaseOutput(Output):
             total_rows = cur.fetchone()[0]  # type: ignore[index]
 
             transfer_time = time.time() - transfer_start
-            file_size_mb = file_size / (1024 * 1024)
             avg_speed = total_rows / transfer_time if transfer_time > 0 else 0
-            speed_mb_s = file_size_mb / transfer_time if transfer_time > 0 else 0
 
             logger.info(
-                "%s Done — %s rows | %.2f MB | %.2fs | %s rows/s (%.2f MB/s)",
+                "%s Done — %s rows | %.2fs | %s rows/s",
                 tag,
                 f"{total_rows:,}",
-                file_size_mb,
                 transfer_time,
                 f"{avg_speed:,.0f}",
-                speed_mb_s,
             )
 
         except OmniQueryError:
@@ -173,8 +171,6 @@ class DatabaseOutput(Output):
         finally:
             cur.close()
             conn.close()
-            if tmp_path and os.path.exists(tmp_path):
-                os.unlink(tmp_path)
 
     @db_retry
     def _get_engine(self) -> Engine:
