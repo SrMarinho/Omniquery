@@ -3,10 +3,13 @@ import time
 from pathlib import Path
 from typing import Any
 
+import connectorx as cx
 import pandas as pd
+import pyarrow as pa
 from duckdb import DuckDBPyConnection
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.engine import Engine, create_engine
+from sqlalchemy.engine.url import make_url
 from tqdm import tqdm
 
 from src.config import memory_database
@@ -17,6 +20,30 @@ from src.utils.database_config_reader import get_database_config
 from src.utils.retry import db_retry
 
 logger = logging.getLogger(__name__)
+
+# Dialetos suportados pelo connectorx (leitura direta para Arrow, sem pandas)
+_CX_DIALECTS = {"postgresql", "postgres", "mssql"}
+
+
+def _to_cx_url(sqlalchemy_url: str) -> str | None:
+    """
+    Converte URL SQLAlchemy para formato connectorx.
+    Retorna None para dialetos não suportados (ex: Oracle).
+    """
+    try:
+        url = make_url(sqlalchemy_url)
+        dialect = url.drivername.split("+")[0]
+        if dialect not in _CX_DIALECTS:
+            return None
+        cx_dialect = "postgresql" if dialect in ("postgresql", "postgres") else dialect
+        user = url.username or ""
+        password = f":{url.password}" if url.password else ""
+        host = url.host or "localhost"
+        port = f":{url.port}" if url.port else ""
+        database = f"/{url.database}" if url.database else ""
+        return f"{cx_dialect}://{user}{password}@{host}{port}{database}"
+    except Exception:
+        return None
 
 
 class Loader(BaseModel):
@@ -80,51 +107,19 @@ class DatabaseLoader(Loader):
         to_engine.execute(f"PRAGMA memory_limit='{DB_MEMORY_LIMIT}'")
 
         logger.info("%s %s — fetching...", tag, table.alias)
-        logger.debug(
-            "%s threads=%d | memory_limit=%s | chunk=%s", tag, DB_THREADS, DB_MEMORY_LIMIT, f"{DB_CHUNK_SIZE:,}"
-        )
 
-        total_rows = 0
         transfer_start = time.time()
+        cx_url = _to_cx_url(source_engine.url.render_as_string(hide_password=False))
 
         try:
-            query = table.content
-            first_chunk = True
-            chunks = pd.read_sql(query, source_engine, chunksize=DB_CHUNK_SIZE)
-
-            with tqdm(desc=f"{self.source}/{table.alias}", unit="chunk", leave=False) as pbar:
-                for i, chunk_df in enumerate(chunks, 1):
-                    chunk_start = time.time()
-                    chunk_df.columns = chunk_df.columns.str.lower()
-                    chunk_rows = len(chunk_df)
-
-                    if to_engine:
-                        to_engine.register("temp_df", chunk_df)
-                        if first_chunk:
-                            to_engine.execute(f"""
-                                CREATE OR REPLACE TABLE {table.alias} AS
-                                SELECT * FROM temp_df
-                            """)
-                            first_chunk = False
-                            operation = "Created"
-                        else:
-                            to_engine.execute(f"""
-                                INSERT INTO {table.alias}
-                                SELECT * FROM temp_df
-                            """)
-                            operation = "Appended"
-                        to_engine.unregister("temp_df")
-
-                    chunk_time = time.time() - chunk_start
-                    total_rows += chunk_rows
-                    pbar.update(1)
-                    pbar.set_postfix({"rows": f"{total_rows:,}", "op": operation})
-                    logger.debug(
-                        "%s %s chunk #%d: %s rows in %.2fs", tag, table.alias, i, f"{chunk_rows:,}", chunk_time
-                    )
-                    del chunk_df
+            if cx_url:
+                self._transfer_via_arrow(cx_url, to_engine, table, tag)
+            else:
+                logger.debug("%s connectorx not supported for this dialect — using pandas", tag)
+                self._transfer_via_pandas(source_engine, to_engine, table, tag)
 
             transfer_time = time.time() - transfer_start
+            total_rows = to_engine.execute(f"SELECT COUNT(*) FROM {table.alias}").fetchone()[0]  # type: ignore[index]
             avg_speed = total_rows / transfer_time if transfer_time > 0 else 0
             logger.info(
                 "%s %s — %s rows | %.2fs | %s rows/s",
@@ -136,8 +131,60 @@ class DatabaseLoader(Loader):
             )
 
         except Exception as e:
-            logger.error("%s %s — Error: %s (rows so far: %s)", tag, table.alias, e, f"{total_rows:,}")
+            logger.error("%s %s — Error: %s", tag, table.alias, e)
             raise LoaderError(f"Failed to transfer table '{table.alias}'") from e
+
+    def _transfer_via_arrow(self, cx_url: str, to_engine: DuckDBPyConnection, table: Table, tag: str) -> None:
+        """Leitura via connectorx → Arrow → DuckDB (sem serialização Python)."""
+        logger.debug("%s %s — using connectorx + Arrow", tag, table.alias)
+
+        arrow_table: pa.Table = cx.read_sql(cx_url, table.content, return_type="arrow2")  # type: ignore[assignment]
+        arrow_table = arrow_table.rename_columns([c.lower() for c in arrow_table.column_names])
+
+        to_engine.register("temp_arrow", arrow_table)
+        to_engine.execute(f"CREATE OR REPLACE TABLE {table.alias} AS SELECT * FROM temp_arrow")
+        to_engine.unregister("temp_arrow")
+        del arrow_table
+
+    def _transfer_via_pandas(
+        self, source_engine: Engine, to_engine: DuckDBPyConnection, table: Table, tag: str
+    ) -> None:
+        """Fallback: leitura via pandas em chunks (para Oracle e outros não suportados pelo connectorx)."""
+        logger.debug(
+            "%s %s — using pandas | chunk=%s | threads=%d | memory=%s",
+            tag,
+            table.alias,
+            f"{DB_CHUNK_SIZE:,}",
+            DB_THREADS,
+            DB_MEMORY_LIMIT,
+        )
+
+        total_rows = 0
+        first_chunk = True
+        chunks = pd.read_sql(table.content, source_engine, chunksize=DB_CHUNK_SIZE)
+
+        with tqdm(desc=f"{self.source}/{table.alias}", unit="chunk", leave=False) as pbar:
+            for i, chunk_df in enumerate(chunks, 1):
+                chunk_start = time.time()
+                chunk_df.columns = chunk_df.columns.str.lower()
+                chunk_rows = len(chunk_df)
+
+                to_engine.register("temp_df", chunk_df)
+                if first_chunk:
+                    to_engine.execute(f"CREATE OR REPLACE TABLE {table.alias} AS SELECT * FROM temp_df")
+                    first_chunk = False
+                    operation = "Created"
+                else:
+                    to_engine.execute(f"INSERT INTO {table.alias} SELECT * FROM temp_df")
+                    operation = "Appended"
+                to_engine.unregister("temp_df")
+
+                chunk_time = time.time() - chunk_start
+                total_rows += chunk_rows
+                pbar.update(1)
+                pbar.set_postfix({"rows": f"{total_rows:,}", "op": operation})
+                logger.debug("%s %s chunk #%d: %s rows in %.2fs", tag, table.alias, i, f"{chunk_rows:,}", chunk_time)
+                del chunk_df
 
 
 class FileLoader(Loader):
