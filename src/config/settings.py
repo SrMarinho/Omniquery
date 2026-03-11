@@ -16,3 +16,6 @@ DB_BATCH_SIZE: int = int(os.getenv("DB_BATCH_SIZE", "500000"))
 
 # Pipeline parallelism
 PIPELINE_WORKERS: int = int(os.getenv("PIPELINE_WORKERS", "4"))
+
+# Oracle ODBC (turbodbc) — nome do driver instalado no sistema
+ORACLE_ODBC_DRIVER: str = os.getenv("ORACLE_ODBC_DRIVER", "Oracle")
