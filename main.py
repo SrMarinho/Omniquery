@@ -1,8 +1,7 @@
-import json
 from dotenv import load_dotenv
-from src.app import App
-from src.entities.pipeline import Pipeline
+
 from cli.commands import parse_args
+from src.app import App
 
 
 def main() -> None:

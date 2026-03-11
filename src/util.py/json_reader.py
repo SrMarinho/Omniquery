@@ -1,5 +1,8 @@
-def read_json_file(file_path: str) -> dict:
-    import json
-    with open(file_path, 'r') as f:
-        data = json.load(f)
+import json
+from typing import Any
+
+
+def read_json_file(file_path: str) -> dict[str, Any]:
+    with open(file_path) as f:
+        data: dict[str, Any] = json.load(f)
     return data
