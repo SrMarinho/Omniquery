@@ -5,6 +5,7 @@ import re
 import yaml
 
 from src.config.settings import base_path
+from src.exceptions import ConfigError
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +21,9 @@ def get_database_config(database: str) -> dict:  # type: ignore[type-arg]
     with open(config_file, encoding="utf-8") as file:
         data = yaml.safe_load(file)  # type: ignore[no-any-return]
         if database not in data:
-            raise ValueError(f"Database {database} not found in {database_file}")
+            raise ConfigError(f"Database '{database}' not found in {database_file}")
         if "connection_string" not in data[database]:
-            logger.error("connection_string not configured for this source: %s", database)
-            raise
+            raise ConfigError(f"connection_string not configured for source '{database}'")
         data[database]["connection_string"] = substitute_env_variables(data[database]["connection_string"])
         return data[database]  # type: ignore[no-any-return]
 

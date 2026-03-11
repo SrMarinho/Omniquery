@@ -10,6 +10,7 @@ from sqlalchemy.engine import Engine, create_engine
 from src.config import memory_database
 from src.config.settings import DB_CHUNK_SIZE, DB_MEMORY_LIMIT, DB_THREADS
 from src.entities.table import Table
+from src.exceptions import LoaderError, OmniQueryError
 from src.utils.database_config_reader import get_database_config
 from src.utils.retry import db_retry
 
@@ -78,12 +79,14 @@ class DatabaseLoader(Loader):
             logger.info("  Total time:       %.2fs", total_time)
             logger.info("─" * 60)
 
+        except OmniQueryError:
+            raise
         except Exception as e:
             job_time = time.time() - job_start
             logger.error("BULK TRANSFER FAILED — source: %s, error: %s (%.2fs)", self.source, e, job_time)
             if "tables_processed" in locals():
                 logger.error("Tables processed before error: %d/%d", tables_processed, len(self.tables))
-            raise
+            raise LoaderError(f"Failed to load from source '{self.source}'") from e
 
     def _transfer(self, source_engine: Engine, to_engine: DuckDBPyConnection, table: Table) -> None:
         """Transfers data from a SQLAlchemy engine to DuckDB."""
@@ -149,6 +152,7 @@ class DatabaseLoader(Loader):
             logger.error(
                 "ERROR transferring data for %s: %s (records processed: %s)", table.alias, e, f"{total_rows:,}"
             )
+            raise LoaderError(f"Failed to transfer table '{table.alias}'") from e
 
 
 class FileLoader(Loader):

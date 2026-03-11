@@ -11,6 +11,7 @@ from sqlalchemy.engine import Engine, create_engine
 
 from src.config import memory_database
 from src.config.settings import DB_BATCH_SIZE, FILE_CHUNK_SIZE
+from src.exceptions import OmniQueryError, OutputError
 from src.utils.database_config_reader import get_database_config
 from src.utils.retry import db_retry
 
@@ -106,12 +107,15 @@ class DatabaseOutput(Output):
             logger.info("  Transfer time:     %.2fs", transfer_time)
             logger.info("  Average speed:     %s rows/s (%.2f MB/s)", f"{avg_speed:,.0f}", speed_mb_s)
 
+        except OmniQueryError:
+            raise
         except Exception as e:
             logger.error("ERROR transferring data for %s: %s", name, e)
             if "total_rows" in locals():
                 logger.error("  Records processed before error: %s", f"{total_rows:,}")
             if "batch_num" in locals():
                 logger.error("  Batches completed before error: %d", batch_num)
+            raise OutputError(f"Failed to transfer data to table '{name}'") from e
 
         finally:
             cur.close()
@@ -141,10 +145,12 @@ class DatabaseOutput(Output):
             job_time = time.time() - job_start
             logger.info("Job completed: %s › %s (%.2fs)", self.output_database, self.name, job_time)
 
+        except OmniQueryError:
+            raise
         except Exception as e:
             job_time = time.time() - job_start
             logger.error("JOB FAILED: %s › %s — %s (%.2fs)", self.output_database, self.name, e, job_time)
-            raise
+            raise OutputError(f"Job failed for '{self.name}'") from e
 
 
 class FileOutput(Output):
@@ -217,6 +223,8 @@ class FileOutput(Output):
             else:
                 logger.warning("No data transferred for %s", filepath.name)
 
+        except OmniQueryError:
+            raise
         except Exception as e:
             logger.error(
                 "ERROR transferring data to %s: %s (records processed: %s)", filepath.name, e, f"{total_rows:,}"
@@ -224,7 +232,7 @@ class FileOutput(Output):
             if filepath.exists() and total_rows == 0:
                 filepath.unlink()
                 logger.info("Removed incomplete file: %s", filepath.name)
-            raise
+            raise OutputError(f"Failed to write file '{filepath.name}'") from e
 
     def run(self) -> None:
         """Executa a transferência de dados."""
@@ -237,9 +245,11 @@ class FileOutput(Output):
             self._transfer(memory_database, self.name, self.query)
             logger.info("Job completed: %s", self.name)
 
+        except OmniQueryError:
+            raise
         except Exception as e:
             logger.error("JOB FAILED: %s — %s", self.name, e)
-            raise
+            raise OutputError(f"Job failed for '{self.name}'") from e
 
 
 class OutputFactory:
