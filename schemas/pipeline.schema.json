@@ -1,0 +1,284 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "pipeline.schema.json",
+  "title": "OmniQuery Pipeline",
+  "description": "Define uma pipeline de ETL do OmniQuery: carrega dados de fontes (loaders), transforma via SQL no DuckDB e exporta para destinos (outputs).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Nome identificador do pipeline (exibido nos logs e no --dry-run).",
+      "examples": ["relatorio_vendas", "sync_clientes"]
+    },
+    "description": {
+      "type": "string",
+      "description": "Descrição legível do pipeline."
+    },
+    "parameters": {
+      "type": "array",
+      "description": "Parâmetros dinâmicos substituídos via CLI com --nome_param valor. Referenciados no YAML como {{ nome_param }}.",
+      "items": { "$ref": "#/$defs/parameter" },
+      "examples": [
+        [
+          { "name": "data_inicio", "type": "date", "required": true, "description": "Data de início (YYYY-MM-DD)" },
+          { "name": "data_fim", "type": "date", "required": true, "description": "Data de fim (YYYY-MM-DD)" }
+        ]
+      ]
+    },
+    "loads": {
+      "type": "array",
+      "description": "Lista de fontes de dados carregadas no DuckDB antes dos outputs.",
+      "items": { "$ref": "#/$defs/loader" }
+    },
+    "outputs": {
+      "type": "array",
+      "description": "Lista de destinos onde os dados transformados são escritos.",
+      "items": { "$ref": "#/$defs/output" }
+    }
+  },
+
+  "$defs": {
+
+    "parameter": {
+      "type": "object",
+      "description": "Parâmetro dinâmico do pipeline.",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Nome do parâmetro — usado como --nome_param na CLI e {{ nome_param }} no YAML.",
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+          "examples": ["data_inicio", "codigo_empresa", "incluir_inativos"]
+        },
+        "type": {
+          "type": "string",
+          "description": "Tipo do valor esperado na CLI.",
+          "enum": ["string", "integer", "float", "boolean", "date"],
+          "default": "string"
+        },
+        "description": {
+          "type": "string",
+          "description": "Texto exibido no --help da CLI para este parâmetro."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Se true, a CLI exige que o parâmetro seja fornecido (sem valor padrão).",
+          "default": false
+        },
+        "default": {
+          "description": "Valor padrão quando o parâmetro não é fornecido na CLI.",
+          "examples": ["2024-01-01", 0, false, "ativo"]
+        }
+      }
+    },
+
+    "table": {
+      "type": "object",
+      "description": "Tabela carregada no DuckDB — o alias é o nome usado nas queries dos outputs.",
+      "required": ["alias"],
+      "additionalProperties": false,
+      "properties": {
+        "alias": {
+          "type": "string",
+          "description": "Nome da tabela no DuckDB. Deve ser um identificador SQL válido.",
+          "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+          "examples": ["vendas", "clientes", "metas_mensais"]
+        },
+        "description": {
+          "type": "string",
+          "description": "Descrição do conteúdo desta tabela."
+        },
+        "type": {
+          "type": "string",
+          "description": "Tipo do conteúdo: 'inline' para SQL direto no YAML, 'sql' para caminho de arquivo .sql externo.",
+          "enum": ["inline", "sql"],
+          "default": "inline"
+        },
+        "content": {
+          "type": "string",
+          "description": "Query SQL (quando type: inline) ou caminho para arquivo .sql (quando type: sql). Suporta {{ parametros }}.",
+          "examples": [
+            "SELECT * FROM pedidos WHERE data >= '{{ data_inicio }}'",
+            "queries/vendas.sql"
+          ]
+        },
+        "options": {
+          "type": "object",
+          "description": "Opções adicionais de carregamento.",
+          "additionalProperties": false,
+          "properties": {
+            "if_exists": {
+              "type": "string",
+              "description": "Comportamento se a tabela já existir no DuckDB.",
+              "enum": ["replace", "append"],
+              "default": "replace"
+            }
+          }
+        }
+      }
+    },
+
+    "loader": {
+      "description": "Fonte de dados carregada no DuckDB. Use 'type: database' para bancos via SQLAlchemy ou 'type: file' para arquivos CSV/Excel.",
+      "oneOf": [
+        { "$ref": "#/$defs/database_loader" },
+        { "$ref": "#/$defs/file_loader" }
+      ]
+    },
+
+    "database_loader": {
+      "type": "object",
+      "description": "Carrega dados de um banco de dados relacional (PostgreSQL, SQL Server, Oracle) para o DuckDB.",
+      "required": ["type", "source", "tables"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "database",
+          "description": "Loader de banco de dados."
+        },
+        "source": {
+          "type": "string",
+          "description": "Nome do banco de dados conforme definido em databases.yaml.",
+          "examples": ["procfit", "senior"]
+        },
+        "tables": {
+          "type": "array",
+          "description": "Tabelas a extrair do banco e carregar no DuckDB.",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/table" }
+        }
+      }
+    },
+
+    "file_loader": {
+      "type": "object",
+      "description": "Carrega dados de um arquivo CSV, XLSX ou XLS para o DuckDB.",
+      "required": ["type", "source", "tables"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "file",
+          "description": "Loader de arquivo."
+        },
+        "source": {
+          "type": "string",
+          "description": "Caminho do arquivo de entrada (.csv, .xlsx ou .xls).",
+          "examples": ["data/metas.csv", "data/clientes.xlsx"]
+        },
+        "tables": {
+          "type": "array",
+          "description": "Tabelas geradas a partir do arquivo no DuckDB.",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "object",
+            "description": "Tabela gerada a partir do arquivo.",
+            "required": ["alias"],
+            "additionalProperties": false,
+            "properties": {
+              "alias": {
+                "type": "string",
+                "description": "Nome da tabela no DuckDB.",
+                "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+              },
+              "description": {
+                "type": "string",
+                "description": "Descrição do conteúdo desta tabela."
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "output": {
+      "description": "Destino dos dados transformados. Use 'type: database' para gravar em banco ou 'type: file' para exportar arquivo.",
+      "oneOf": [
+        { "$ref": "#/$defs/database_output" },
+        { "$ref": "#/$defs/file_output" }
+      ]
+    },
+
+    "database_output": {
+      "type": "object",
+      "description": "Exporta dados do DuckDB para um banco de dados de destino.",
+      "required": ["type", "name", "query"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "database",
+          "description": "Output para banco de dados."
+        },
+        "name": {
+          "type": "string",
+          "description": "Nome da tabela de destino no banco. Suporta schema: 'schema.tabela'.",
+          "examples": ["relatorio_vendas", "public.clientes_consolidado"]
+        },
+        "query": {
+          "type": "string",
+          "description": "Query SQL executada no DuckDB para gerar os dados de saída. Referencia os aliases definidos nos loads."
+        },
+        "options": {
+          "type": "object",
+          "description": "Opções de escrita no banco de destino.",
+          "additionalProperties": false,
+          "properties": {
+            "if_exists": {
+              "type": "string",
+              "description": "'replace' recria a tabela do zero; 'append' adiciona linhas sem apagar.",
+              "enum": ["replace", "append"],
+              "default": "replace"
+            }
+          }
+        }
+      }
+    },
+
+    "file_output": {
+      "type": "object",
+      "description": "Exporta dados do DuckDB para um arquivo CSV, XLSX ou XLS (formato inferido pela extensão).",
+      "required": ["type", "name", "query"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "file",
+          "description": "Output para arquivo."
+        },
+        "name": {
+          "type": "string",
+          "description": "Caminho do arquivo de saída. O formato é inferido pela extensão (.csv, .xlsx, .xls).",
+          "examples": [
+            "outputs/relatorio.csv",
+            "outputs/relatorio.xlsx"
+          ],
+          "pattern": ".*\\.(csv|xlsx|xls)$"
+        },
+        "query": {
+          "type": "string",
+          "description": "Query SQL executada no DuckDB para gerar os dados do arquivo.",
+          "examples": ["SELECT * FROM vendas ORDER BY data_emissao"]
+        },
+        "options": {
+          "type": "object",
+          "description": "Opções de escrita no arquivo.",
+          "additionalProperties": false,
+          "properties": {
+            "if_exists": {
+              "type": "string",
+              "description": "'replace' sobrescreve o arquivo; 'append' adiciona linhas (apenas CSV).",
+              "enum": ["replace", "append"],
+              "default": "replace"
+            }
+          }
+        }
+      }
+    }
+
+  }
+}

@@ -12,9 +12,11 @@ wheels/
 # Environment files
 .env
 .env.*
+!.env.example
 
 # IDE-specific files
-.vscode/
+.vscode/*
+!.vscode/settings.json
 .idea/
 *.iml
 
@@ -25,3 +27,7 @@ wheels/
 
 
 outputs/
+
+.claude/
+
+logs/

@@ -17,8 +17,50 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "pytz>=2025.2",
     "pyyaml>=6.0.3",
+    "rich>=14.3.3",
+    "rich-argparse>=1.7.2",
     "sqlalchemy>=2.0.46",
+    "tenacity>=9.0.0",
     "tqdm>=4.67.1",
     "types-pyyaml>=6.0.12.20250915",
     "types-sqlalchemy>=1.4.53.38",
 ]
+
+[dependency-groups]
+dev = [
+    "jsonschema>=4.26.0",
+    "mypy>=1.14.0",
+    "pre-commit>=4.0.0",
+    "pytest>=8.0.0",
+    "ruff>=0.9.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes (unused imports, undefined names)
+    "I",   # isort (import sorting)
+    "UP",  # pyupgrade (modern Python syntax)
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src", "cli"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["duckdb.*", "oracledb.*", "pyodbc.*", "psycopg2.*"]
+ignore_missing_imports = true

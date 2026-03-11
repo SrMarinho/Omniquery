@@ -40,30 +40,35 @@ uv sync
 
 ### Variáveis de ambiente
 
-Crie um arquivo `.env` na raiz do projeto com as credenciais dos bancos de dados:
+Copie `.env.example` para `.env` e preencha com suas credenciais:
 
-```env
-# PostgreSQL
-DATABASE_USER=usuario
-DATABASE_PASSWORD=senha
-DATABASE_HOST=localhost
-DATABASE_PORT=5432
-DATABASE_NAME=meu_banco
-
-# SQL Server (Procfit)
-PROCFIT_DATABASE_USER=usuario
-PROCFIT_DATABASE_PASSWORD=senha
-PROCFIT_DATABASE_HOST=localhost
-PROCFIT_DATABASE_PORT=1433
-PROCFIT_DATABASE_NAME=meu_banco
-
-# Oracle (Senior)
-SENIOR_DATABASE_USER=usuario
-SENIOR_DATABASE_PASSWORD=senha
-SENIOR_DATABASE_HOST=localhost
-SENIOR_DATABASE_PORT=1521
-SENIOR_DATABASE_SERVICE_NAME=meu_servico
+```bash
+cp .env.example .env
 ```
+
+#### Credenciais de banco
+
+| Variável | Descrição |
+|---|---|
+| `DATABASE_*` | Conexão PostgreSQL |
+| `PROCFIT_DATABASE_*` | Conexão SQL Server (Procfit) |
+| `SENIOR_DATABASE_*` | Conexão Oracle (Senior) |
+
+#### Logging
+
+| Variável | Padrão | Descrição |
+|---|---|---|
+| `LOG_LEVEL` | `INFO` | Nível de log: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+
+#### Tuning de transferência
+
+| Variável | Padrão | Descrição |
+|---|---|---|
+| `DB_CHUNK_SIZE` | `500000` | Linhas por chunk ao ler de banco de dados |
+| `DB_THREADS` | `4` | Threads do DuckDB para processamento |
+| `DB_MEMORY_LIMIT` | `4GB` | Limite de memória do DuckDB |
+| `FILE_CHUNK_SIZE` | `100000` | Linhas por chunk ao escrever CSV |
+| `DB_BATCH_SIZE` | `500000` | Linhas por batch ao escrever em banco de dados |
 
 ### Bancos de dados (`databases.yaml`)
 
@@ -186,12 +191,39 @@ omniquery/
 ## Tipos de Loader
 
 - **`database`** — Carrega dados de bancos via SQLAlchemy (PostgreSQL, SQL Server, Oracle)
-- **`file`** — Carrega dados de arquivos CSV
+- **`file`** — Carrega dados de arquivos CSV, XLSX e XLS
 
 ## Tipos de Output
 
 - **`database`** — Exporta para banco de dados usando COPY otimizado (PostgreSQL)
-- **`file`** — Exporta para arquivo CSV em chunks
+- **`file`** — Exporta para arquivo CSV, XLSX ou XLS (formato inferido pela extensão do nome)
+
+## Desenvolvimento
+
+### Instalando dependências de desenvolvimento
+
+```bash
+uv sync --group dev
+```
+
+### Lint e formatação (Ruff)
+
+```bash
+# Verificar problemas
+uv run ruff check .
+
+# Corrigir automaticamente
+uv run ruff check . --fix
+
+# Formatar código
+uv run ruff format .
+```
+
+### Verificação de tipos (Mypy)
+
+```bash
+uv run mypy src/ cli/ main.py
+```
 
 ## Tecnologias
 
@@ -200,3 +232,5 @@ omniquery/
 - **[Pydantic](https://docs.pydantic.dev/)** — Validação de dados e modelos
 - **[Pandas](https://pandas.pydata.org/)** — Manipulação de DataFrames para transferência em chunks
 - **[uv](https://docs.astral.sh/uv/)** — Gerenciador de pacotes Python
+- **[Ruff](https://docs.astral.sh/ruff/)** — Linter e formatador Python
+- **[Mypy](https://mypy-lang.org/)** — Verificação estática de tipos

@@ -1,5 +1,8 @@
 name: senior_connection_test
 description: Pipeline para testar conexão com o Senior
+parameters:
+  - name: title
+    description: Título do pipeline
 loads:
   - type: database
     source: senior

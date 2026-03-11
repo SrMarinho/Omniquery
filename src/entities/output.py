@@ -1,306 +1,298 @@
-import time
-import csv
 import io
-import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import queue
+import logging
+import time
 from pathlib import Path
-from pydantic import BaseModel, Field, model_validator
-from typing import Dict, Any, Type
-from duckdb import DuckDBPyConnection
+from typing import Any
+
 import pandas as pd
-from sqlalchemy import text
-from sqlalchemy.engine import create_engine, Engine
-from src.types.file_output_format_types import FileOutputFormatTypes
-from src.utils.database_config_reader import get_database_config
+from duckdb import DuckDBPyConnection
+from pydantic import BaseModel, Field
+from sqlalchemy.engine import Engine, create_engine
+from tqdm import tqdm
+
 from src.config import memory_database
+from src.config.settings import DB_BATCH_SIZE, FILE_CHUNK_SIZE
+from src.exceptions import OmniQueryError, OutputError
+from src.utils.database_config_reader import get_database_config
+from src.utils.retry import db_retry
+
+logger = logging.getLogger(__name__)
+
 
 class Output(BaseModel):
     type: str
     name: str
     query: str
-    options: Dict = Field(default_factory=dict)
+    options: dict = Field(default_factory=dict)
 
     def run(self) -> None:
-        print(f"Writing output type: {type(self)}")
+        logger.info("Writing output type: %s", type(self).__name__)
+
 
 class DatabaseOutput(Output):
-    type: str = "database" 
+    type: str = "database"
     output_database: str = Field(default="postgresql")
-    
+
     def _transfer(self, source_database: DuckDBPyConnection, output_database: Engine, name: str, query: str) -> None:
         """
         Transfere dados do DuckDB para PostgreSQL em batches usando fetchmany.
         """
-        # Configurações
-        BATCH_SIZE = 500000
-        
-        # Tempo de configuração
-        config_start = time.time()
         conn = output_database.raw_connection()
-        config_time = time.time() - config_start
 
-        print(f"📤 Starting transfer: DuckDB ➔ PostgreSQL [Table: {name}]")
-        print(f"⚙️  Settings: synchronous_commit=OFF | if_exists={self.options.get('if_exists', 'replace')} | batch_size={BATCH_SIZE}")
-        print("─" * 60)
-        
+        logger.info("Starting transfer: DuckDB → PostgreSQL [table: %s]", name)
+        logger.debug(
+            "Settings: synchronous_commit=OFF | if_exists=%s | batch_size=%s",
+            self.options.get("if_exists", "replace"),
+            DB_BATCH_SIZE,
+        )
+        logger.info("─" * 60)
+
         try:
             cur = conn.cursor()
             cur.execute("SET synchronous_commit TO OFF")
-            
-            # Limpa tabela existente se necessário
+
             if self.options.get("if_exists", "replace") == "replace":
-                cur.execute(f'DROP TABLE IF EXISTS {name}')
-            
-            # Executa query e obtém cursor para fetchmany
-            print("📊 Executing query...")
+                cur.execute(f"DROP TABLE IF EXISTS {name}")
+
+            logger.info("Executing query...")
             query_start = time.time()
             result = source_database.execute(query)
             columns = [desc[0].lower() for desc in result.description]
             query_time = time.time() - query_start
-            print(f"  Query executed: {columns} ⏱️  {query_time:.2f}s")
-            
-            # Cria tabela
-            columns_def = ', '.join([f'"{col}" TEXT' for col in columns])
-            cur.execute(f'CREATE TABLE {name} ({columns_def})')
+            logger.debug("Query executed — columns: %s (%.2fs)", columns, query_time)
+
+            columns_def = ", ".join([f'"{col}" TEXT' for col in columns])
+            cur.execute(f"CREATE TABLE {name} ({columns_def})")
             conn.commit()
-            
-            # Processa dados em batches com fetchmany
+
             transfer_start = time.time()
-            print(f"  Transferring data in batches of {BATCH_SIZE:,} rows...")
-            
+            logger.info("Transferring data in batches of %s rows...", f"{DB_BATCH_SIZE:,}")
+
             batch_num = 0
             total_rows = 0
             data_size = 0
-            
-            while True:
-                # Pega próximo batch
-                rows = result.fetchmany(BATCH_SIZE)
-                if not rows:
-                    break
-                    
-                batch_num += 1
-                total_rows += len(rows)
-                
-                # Prepara dados para COPY
-                output = io.StringIO()
-                for row in rows:
-                    line = '\t'.join(['\\N' if v is None else str(v) for v in row])
-                    data_size += len(line.encode('utf-8')) + 1
-                    output.write(line + '\n')
-                
-                output.seek(0)
-                
-                # COPY para PostgreSQL
-                cur.copy_from(output, name, sep='\t', null='\\N', columns=columns)
-                conn.commit()
-            
-            # Otimiza
+
+            with tqdm(desc=name, unit="batch", leave=False) as pbar:
+                while True:
+                    rows = result.fetchmany(DB_BATCH_SIZE)
+                    if not rows:
+                        break
+
+                    batch_num += 1
+                    total_rows += len(rows)
+
+                    output = io.StringIO()
+                    for row in rows:
+                        line = "\t".join(["\\N" if v is None else str(v) for v in row])
+                        data_size += len(line.encode("utf-8")) + 1
+                        output.write(line + "\n")
+
+                    output.seek(0)
+
+                    cur.copy_from(output, name, sep="\t", null="\\N", columns=columns)  # type: ignore[attr-defined]
+                    conn.commit()
+
+                    pbar.update(1)
+                    pbar.set_postfix({"rows": f"{total_rows:,}"})
+
             cur.execute(f"ANALYZE {name}")
             conn.commit()
-            
+
             transfer_time = time.time() - transfer_start
-            total_time = time.time() - config_start
-            
+
             avg_speed = total_rows / transfer_time if transfer_time > 0 else 0
             data_size_mb = data_size / (1024 * 1024)
             speed_mb_s = data_size_mb / transfer_time if transfer_time > 0 else 0
-            
-            print("─" * 60)
-            print(f"✅ Transfer completed successfully!")
-            print(f"📊 Final summary for table {name}:")
-            print(f"   • Total records:     {total_rows:>15,}")
-            print(f"   • Data size:         {data_size_mb:>15.2f} MB")
-            print(f"   • Batches processed: {batch_num:>15}")
-            print(f"   • Transfer time:     {transfer_time:>15.2f}s")
-            print(f"   • Average speed:     {avg_speed:>15,.0f} rows/s  ({speed_mb_s:.2f} MB/s)")
-            print("\n")
-            
+
+            logger.info("─" * 60)
+            logger.info("Transfer completed: %s", name)
+            logger.info("  Total records:     %s", f"{total_rows:,}")
+            logger.info("  Data size:         %.2f MB", data_size_mb)
+            logger.info("  Batches processed: %d", batch_num)
+            logger.info("  Transfer time:     %.2fs", transfer_time)
+            logger.info("  Average speed:     %s rows/s (%.2f MB/s)", f"{avg_speed:,.0f}", speed_mb_s)
+
+        except OmniQueryError:
+            raise
         except Exception as e:
-            print("❌" * 30)
-            print(f"🔴 ERROR transferring data for {name}")
-            print(f"⚠️  Details: {str(e)}")
-            if 'total_rows' in locals():
-                print(f"📋 Records processed before error: {total_rows:,}")
-            if 'batch_num' in locals():
-                print(f"📦 Batches completed before error: {batch_num}")
-            print("❌" * 30)
-            
+            logger.error("ERROR transferring data for %s: %s", name, e)
+            if "total_rows" in locals():
+                logger.error("  Records processed before error: %s", f"{total_rows:,}")
+            if "batch_num" in locals():
+                logger.error("  Batches completed before error: %d", batch_num)
+            raise OutputError(f"Failed to transfer data to table '{name}'") from e
+
         finally:
             cur.close()
             conn.close()
 
+    @db_retry
+    def _get_engine(self) -> Engine:
+        output_connection_string: str = get_database_config(self.output_database)["connection_string"]
+        engine = create_engine(output_connection_string)
+        with engine.connect():
+            pass
+        return engine
+
     def run(self) -> None:
         """Executa a transferência de dados do DuckDB para o banco de dados de destino."""
         job_start = time.time()
-        
-        print("─" * 60)
-        print(f"🚀 Starting job: {self.name}")
-        print(f"📋 Target: {self.output_database} › Table: {self.name}")
-        print("─" * 60)
-        
+
+        logger.info("─" * 60)
+        logger.info("Starting job: %s → %s", self.output_database, self.name)
+        logger.info("─" * 60)
+
         try:
-            output_connection_string: str = get_database_config(self.output_database)["connection_string"]
-            output_engine = create_engine(output_connection_string)
-            
+            output_engine = self._get_engine()
+
             self._transfer(memory_database, output_engine, self.name, self.query)
-            
+
             job_time = time.time() - job_start
-            print("─" * 60)
-            print(f"✅ Job completed successfully: {self.name}")
-            print(f"📊 Destination: {self.output_database} › {self.name}")
-            print(f"⏱️  Total time: {job_time:.2f}s")
-            print("─" * 60)
-            
+            logger.info("Job completed: %s › %s (%.2fs)", self.output_database, self.name, job_time)
+
+        except OmniQueryError:
+            raise
         except Exception as e:
             job_time = time.time() - job_start
-            print("❌" * 30)
-            print(f"🔴 JOB FAILED: {self.name}")
-            print(f"⚠️  Target: {self.output_database} › {self.name}")
-            print(f"⚠️  Error: {str(e)}")
-            print(f"⏱️  Failed after: {job_time:.2f}s")
-            print("❌" * 30)
-            raise
+            logger.error("JOB FAILED: %s › %s — %s (%.2fs)", self.output_database, self.name, e, job_time)
+            raise OutputError(f"Job failed for '{self.name}'") from e
+
 
 class FileOutput(Output):
-    type: str = "file" 
+    type: str = "file"
 
     def _transfer(self, source_engine: DuckDBPyConnection, file_path: str, query: str) -> None:
         """
-        Transfere dados do DuckDB para arquivo CSV em chunks.
+        Transfere dados do DuckDB para arquivo (CSV em chunks, Excel em memória).
         """
-        from pathlib import Path
-        import time
-        import pandas as pd
-        
         filepath = Path(file_path)
         filepath.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Tempo de configuração
-        config_start = time.time()
-        chunk_size = 100000
-        
-        print(f"📤 Starting transfer: DuckDB ➔ CSV [File: {filepath.name}]")
-        print(f"⚙️  Settings: chunk_size={chunk_size:,} | location={file_path}")
-        print("─" * 60)
-        
+
+        ext = filepath.suffix.lower()
+        is_excel = ext in (".xlsx", ".xls")
+        fmt_label = "Excel" if is_excel else "CSV"
+
+        logger.info("Starting transfer: DuckDB → %s [file: %s]", fmt_label, filepath.name)
+        if not is_excel:
+            logger.debug("Settings: chunk_size=%s | location=%s", f"{FILE_CHUNK_SIZE:,}", file_path)
+        logger.info("─" * 60)
+
         total_rows = 0
         transfer_start = time.time()
-        first_chunk = True
-        chunk_count = 0
-        
-        # Executa a query e obtém o cursor
+
         cursor = source_engine.execute(query)
-        
-        # Pega os nomes das colunas
         columns = [desc[0] for desc in cursor.description]
-        
+
         try:
-            while True:
-                # Busca um chunk de dados
-                rows = cursor.fetchmany(chunk_size)
-                if not rows:
-                    break
-                    
-                chunk_count += 1
-                chunk_start = time.time()
-                
-                # Cria DataFrame com os dados do chunk
-                chunk_df = pd.DataFrame(rows, columns=columns)
-                
-                # Normaliza nomes das colunas
-                chunk_df.columns = chunk_df.columns.str.lower()
-                chunk_rows = len(chunk_df)
-                
-                # Escreve chunk no CSV
-                if first_chunk:
-                    chunk_df.to_csv(filepath, index=False)
-                    operation = "🆗 Created"
-                    first_chunk = False
-                else:
-                    chunk_df.to_csv(filepath, mode="a", index=False, header=False)
-                    operation = "➕ Appended"
-                
-                # Estatísticas do chunk
-                chunk_time = time.time() - chunk_start
-                total_rows += chunk_rows
-                
-                # Calcula velocidade (com segurança)
-                if chunk_time > 0:
-                    speed = chunk_rows / chunk_time
-                    print(f"  Batch #{chunk_count:2d} {operation:12s} : {chunk_rows:10,} rows "
-                        f"⏱️  {chunk_time:5.2f}s")
-                else:
-                    print(f"  Batch #{chunk_count:2d} {operation:12s} : {chunk_rows:10,} rows "
-                        f"⏱️  {chunk_time:5.2f}s (transferência instantânea)")
-                
-                del chunk_df
-            
+            if is_excel:
+                # Excel doesn't support append mode — load everything into memory
+                all_rows = cursor.fetchall()
+                df = pd.DataFrame(all_rows, columns=columns)
+                df.columns = df.columns.str.lower()
+                total_rows = len(df)
+
+                with tqdm(desc=filepath.name, unit="file", leave=False, total=1) as pbar:
+                    df.to_excel(filepath, index=False, engine="openpyxl")
+                    pbar.update(1)
+                    pbar.set_postfix({"rows": f"{total_rows:,}"})
+
+                del df
+            else:
+                first_chunk = True
+                chunk_count = 0
+
+                with tqdm(desc=filepath.name, unit="chunk", leave=False) as pbar:
+                    while True:
+                        rows = cursor.fetchmany(FILE_CHUNK_SIZE)
+                        if not rows:
+                            break
+
+                        chunk_count += 1
+                        chunk_start = time.time()
+
+                        chunk_df = pd.DataFrame(rows, columns=columns)
+                        chunk_df.columns = chunk_df.columns.str.lower()
+                        chunk_rows = len(chunk_df)
+
+                        if first_chunk:
+                            chunk_df.to_csv(filepath, index=False)
+                            operation = "Created"
+                            first_chunk = False
+                        else:
+                            chunk_df.to_csv(filepath, mode="a", index=False, header=False)
+                            operation = "Appended"
+
+                        chunk_time = time.time() - chunk_start
+                        total_rows += chunk_rows
+
+                        pbar.update(1)
+                        pbar.set_postfix({"rows": f"{total_rows:,}", "op": operation})
+                        logger.debug(
+                            "Batch #%2d %-10s : %10s rows  %.2fs",
+                            chunk_count,
+                            operation,
+                            f"{chunk_rows:,}",
+                            chunk_time,
+                        )
+
+                        del chunk_df
+
             transfer_time = time.time() - transfer_start
-            total_time = time.time() - config_start
-            
-            # Estatísticas finais
+
             if total_rows > 0:
                 file_size = filepath.stat().st_size
                 avg_speed = total_rows / transfer_time if transfer_time > 0 else 0
                 file_size_mb = file_size / (1024 * 1024)
                 speed_mb_s = file_size_mb / transfer_time if transfer_time > 0 else 0
-                
-                print("─" * 60)
-                print(f"✅ Transfer completed successfully!")
-                print(f"📊 Final summary for file {filepath.name}:")
-                print(f"   • Total records:     {total_rows:>15,}")
-                print(f"   • File size:         {file_size_mb:>15.2f} MB")
-                print(f"   • Number of chunks:  {chunk_count:>15,}")
-                print(f"   • Transfer time:     {transfer_time:>15.2f}s")
-                print(f"   • Average speed:     {avg_speed:>15,.0f} rows/s ({speed_mb_s:.2f} MB/s)")
-                print("\n")
+
+                logger.info("─" * 60)
+                logger.info("Transfer completed: %s", filepath.name)
+                logger.info("  Total records:    %s", f"{total_rows:,}")
+                logger.info("  File size:        %.2f MB", file_size_mb)
+                logger.info("  Transfer time:    %.2fs", transfer_time)
+                logger.info("  Average speed:    %s rows/s (%.2f MB/s)", f"{avg_speed:,.0f}", speed_mb_s)
             else:
-                print("─" * 60)
-                print(f"⚠️  WARNING: No data transferred for {filepath.name}")
-                print("\n")
-                
+                logger.warning("No data transferred for %s", filepath.name)
+
+        except OmniQueryError:
+            raise
         except Exception as e:
-            print("❌" * 30)
-            print(f"🔴 ERROR transferring data to {filepath.name}")
-            print(f"⚠️  Details: {str(e)}")
-            print(f"📋 Records processed before error: {total_rows:,}")
-            # Remove arquivo incompleto se houver erro
+            logger.error(
+                "ERROR transferring data to %s: %s (records processed: %s)", filepath.name, e, f"{total_rows:,}"
+            )
             if filepath.exists() and total_rows == 0:
                 filepath.unlink()
-                print(f"🗑️  Removed incomplete file: {filepath.name}")
-            print("❌" * 30)
-            raise
-
+                logger.info("Removed incomplete file: %s", filepath.name)
+            raise OutputError(f"Failed to write file '{filepath.name}'") from e
 
     def run(self) -> None:
         """Executa a transferência de dados."""
-        
-        print("─" * 60)
-        print(f"🚀 Starting job: {self.name}")
-        print("─" * 60)
-        
+
+        logger.info("─" * 60)
+        logger.info("Starting job: %s", self.name)
+        logger.info("─" * 60)
+
         try:
             self._transfer(memory_database, self.name, self.query)
-            print(f"✨ Job completed successfully: {self.name}")
-            print("─" * 60)
-            
-        except Exception as e:
-            print("❌" * 30)
-            print(f"🔴 JOB FAILED: {self.name}")
-            print(f"⚠️  Error: {str(e)}")
-            print("❌" * 30)
+            logger.info("Job completed: %s", self.name)
+
+        except OmniQueryError:
             raise
+        except Exception as e:
+            logger.error("JOB FAILED: %s — %s", self.name, e)
+            raise OutputError(f"Job failed for '{self.name}'") from e
+
 
 class OutputFactory:
     output_types = {
         "database": DatabaseOutput,
         "file": FileOutput,
     }
+
     @staticmethod
-    def create(config: Dict[str, Any]) -> Output:
+    def create(config: dict[str, Any]) -> Output:
         output_type: str = config.get("type", "")
         if output_type.lower() in OutputFactory.output_types:
-            return OutputFactory.output_types[output_type.lower()](**config)
-        
+            return OutputFactory.output_types[output_type.lower()](**config)  # type: ignore[no-any-return]
+
         return Output(**config)
