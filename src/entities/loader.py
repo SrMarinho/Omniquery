@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,8 @@ from src.entities.table import Table
 from src.exceptions import LoaderError, OmniQueryError
 from src.utils.database_config_reader import get_database_config
 from src.utils.retry import db_retry
+
+_duckdb_lock = threading.Lock()
 
 logger = logging.getLogger(__name__)
 
@@ -141,9 +144,11 @@ class DatabaseLoader(Loader):
         arrow_table: pa.Table = cx.read_sql(cx_url, table.content, return_type="arrow")  # type: ignore[assignment]
         arrow_table = arrow_table.rename_columns([c.lower() for c in arrow_table.column_names])
 
-        to_engine.register("temp_arrow", arrow_table)
-        to_engine.execute(f"CREATE OR REPLACE TABLE {table.alias} AS SELECT * FROM temp_arrow")
-        to_engine.unregister("temp_arrow")
+        tmp_name = f"__cx_{threading.get_ident()}"
+        with _duckdb_lock:
+            to_engine.register(tmp_name, arrow_table)
+            to_engine.execute(f"CREATE OR REPLACE TABLE {table.alias} AS SELECT * FROM {tmp_name}")
+            to_engine.unregister(tmp_name)
         del arrow_table
 
     def _transfer_via_pandas(
@@ -162,6 +167,7 @@ class DatabaseLoader(Loader):
         total_rows = 0
         first_chunk = True
         chunks = pd.read_sql(table.content, source_engine, chunksize=DB_CHUNK_SIZE)
+        tmp_name = f"__pd_{threading.get_ident()}"
 
         with tqdm(desc=f"{self.source}/{table.alias}", unit="chunk", leave=False) as pbar:
             for i, chunk_df in enumerate(chunks, 1):
@@ -169,15 +175,16 @@ class DatabaseLoader(Loader):
                 chunk_df.columns = chunk_df.columns.str.lower()
                 chunk_rows = len(chunk_df)
 
-                to_engine.register("temp_df", chunk_df)
-                if first_chunk:
-                    to_engine.execute(f"CREATE OR REPLACE TABLE {table.alias} AS SELECT * FROM temp_df")
-                    first_chunk = False
-                    operation = "Created"
-                else:
-                    to_engine.execute(f"INSERT INTO {table.alias} SELECT * FROM temp_df")
-                    operation = "Appended"
-                to_engine.unregister("temp_df")
+                with _duckdb_lock:
+                    to_engine.register(tmp_name, chunk_df)
+                    if first_chunk:
+                        to_engine.execute(f"CREATE OR REPLACE TABLE {table.alias} AS SELECT * FROM {tmp_name}")
+                        first_chunk = False
+                        operation = "Created"
+                    else:
+                        to_engine.execute(f"INSERT INTO {table.alias} SELECT * FROM {tmp_name}")
+                        operation = "Appended"
+                    to_engine.unregister(tmp_name)
 
                 chunk_time = time.time() - chunk_start
                 total_rows += chunk_rows

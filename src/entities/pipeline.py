@@ -1,8 +1,10 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+from src.config.settings import PIPELINE_WORKERS
 from src.entities.loader import Loader, LoaderFactory
 from src.entities.output import Output, OutputFactory
 from src.entities.parameter import Parameter
@@ -18,10 +20,19 @@ class Pipeline(BaseModel):
     outputs: list[Output] = Field(default=[])
 
     def run(self) -> None:
-        for load in self.loads:
-            load.run()
-        for output in self.outputs:
-            output.run()
+        self._run_parallel(self.loads, "loaders")
+        self._run_parallel(self.outputs, "outputs")
+
+    def _run_parallel(self, items: list, label: str) -> None:
+        if not items:
+            return
+        tag = f"[pipeline:{self.name or 'pipeline'}]"
+        workers = min(PIPELINE_WORKERS, len(items))
+        logger.debug("%s Running %d %s with %d worker(s)", tag, len(items), label, workers)
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {executor.submit(item.run): item for item in items}
+            for future in as_completed(futures):
+                future.result()
 
     @model_validator(mode="before")
     @classmethod

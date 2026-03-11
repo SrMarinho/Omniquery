@@ -13,3 +13,6 @@ FILE_CHUNK_SIZE: int = int(os.getenv("FILE_CHUNK_SIZE", "100000"))
 
 # Database output
 DB_BATCH_SIZE: int = int(os.getenv("DB_BATCH_SIZE", "500000"))
+
+# Pipeline parallelism
+PIPELINE_WORKERS: int = int(os.getenv("PIPELINE_WORKERS", "4"))
