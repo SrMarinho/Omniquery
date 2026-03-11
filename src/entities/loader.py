@@ -201,15 +201,14 @@ class FileLoader(Loader):
         ext = Path(source).suffix.lower()
         if ext in (".xlsx", ".xls"):
             df = pd.read_excel(source)
+            df.columns = df.columns.str.lower()
+            to_engine.register("temp_df", df)
+            to_engine.execute(f"CREATE OR REPLACE TABLE {table.alias} AS SELECT * FROM temp_df")
+            to_engine.unregister("temp_df")
         else:
-            df = pd.read_csv(source)
-        df.columns = df.columns.str.lower()
-        to_engine.register("temp_df", df)
-        to_engine.execute(f"""
-            CREATE OR REPLACE TABLE {table.alias} AS
-            SELECT * FROM temp_df
-        """)
-        to_engine.unregister("temp_df")
+            # DuckDB native read_csv_auto — sem pandas
+            duckdb_path = source.replace("\\", "/")
+            to_engine.execute(f"CREATE OR REPLACE TABLE {table.alias} AS SELECT * FROM read_csv_auto('{duckdb_path}')")
 
     def run(self) -> None:
         tag = f"[load:{Path(self.source).name}]"

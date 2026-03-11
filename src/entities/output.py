@@ -12,7 +12,6 @@ from sqlalchemy.engine import Engine, create_engine
 from tqdm import tqdm
 
 from src.config import memory_database
-from src.config.settings import FILE_CHUNK_SIZE
 from src.exceptions import OmniQueryError, OutputError
 from src.utils.database_config_reader import get_database_config
 from src.utils.retry import db_retry
@@ -158,7 +157,8 @@ class FileOutput(Output):
 
     def _transfer(self, source_engine: DuckDBPyConnection, file_path: str, query: str) -> None:
         """
-        Transfere dados do DuckDB para arquivo (CSV em chunks, Excel em memória).
+        Transfere dados do DuckDB para arquivo.
+        CSV: DuckDB native COPY (sem pandas). Excel: pandas em memória.
         """
         filepath = Path(file_path)
         filepath.parent.mkdir(parents=True, exist_ok=True)
@@ -169,16 +169,14 @@ class FileOutput(Output):
         tag = f"[out:{filepath.name}]"
 
         logger.info("%s Writing %s...", tag, fmt_label)
-        logger.debug("%s chunk_size=%s | path=%s", tag, f"{FILE_CHUNK_SIZE:,}", file_path)
 
         total_rows = 0
         transfer_start = time.time()
 
-        cursor = source_engine.execute(query)
-        columns = [desc[0] for desc in cursor.description]
-
         try:
             if is_excel:
+                cursor = source_engine.execute(query)
+                columns = [desc[0] for desc in cursor.description]
                 all_rows = cursor.fetchall()
                 df = pd.DataFrame(all_rows, columns=columns)
                 df.columns = df.columns.str.lower()
@@ -191,43 +189,11 @@ class FileOutput(Output):
 
                 del df
             else:
-                first_chunk = True
-                chunk_count = 0
-
-                with tqdm(desc=filepath.name, unit="chunk", leave=False) as pbar:
-                    while True:
-                        rows = cursor.fetchmany(FILE_CHUNK_SIZE)
-                        if not rows:
-                            break
-
-                        chunk_count += 1
-                        chunk_start = time.time()
-
-                        chunk_df = pd.DataFrame(rows, columns=columns)
-                        chunk_df.columns = chunk_df.columns.str.lower()
-                        chunk_rows = len(chunk_df)
-
-                        if first_chunk:
-                            chunk_df.to_csv(filepath, index=False)
-                            operation = "Created"
-                            first_chunk = False
-                        else:
-                            chunk_df.to_csv(filepath, mode="a", index=False, header=False)
-                            operation = "Appended"
-
-                        chunk_time = time.time() - chunk_start
-                        total_rows += chunk_rows
-                        pbar.update(1)
-                        pbar.set_postfix({"rows": f"{total_rows:,}", "op": operation})
-                        logger.debug(
-                            "%s chunk #%d %s — %s rows in %.2fs",
-                            tag,
-                            chunk_count,
-                            operation,
-                            f"{chunk_rows:,}",
-                            chunk_time,
-                        )
-                        del chunk_df
+                # DuckDB native COPY — sem loop Python nem pandas
+                duckdb_path = str(filepath).replace("\\", "/")
+                source_engine.execute(f"COPY ({query}) TO '{duckdb_path}' (FORMAT CSV, HEADER TRUE)")
+                with open(filepath, encoding="utf-8") as f:
+                    total_rows = sum(1 for _ in f) - 1  # descontar cabeçalho
 
             transfer_time = time.time() - transfer_start
 
