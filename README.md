@@ -193,6 +193,33 @@ omniquery/
 - **`database`** — Exporta para banco de dados usando COPY otimizado (PostgreSQL)
 - **`file`** — Exporta para arquivo CSV em chunks
 
+## Desenvolvimento
+
+### Instalando dependências de desenvolvimento
+
+```bash
+uv sync --group dev
+```
+
+### Lint e formatação (Ruff)
+
+```bash
+# Verificar problemas
+uv run ruff check .
+
+# Corrigir automaticamente
+uv run ruff check . --fix
+
+# Formatar código
+uv run ruff format .
+```
+
+### Verificação de tipos (Mypy)
+
+```bash
+uv run mypy src/ cli/ main.py
+```
+
 ## Tecnologias
 
 - **[DuckDB](https://duckdb.org/)** — Banco analítico in-memory para processamento intermediário
@@ -200,3 +227,5 @@ omniquery/
 - **[Pydantic](https://docs.pydantic.dev/)** — Validação de dados e modelos
 - **[Pandas](https://pandas.pydata.org/)** — Manipulação de DataFrames para transferência em chunks
 - **[uv](https://docs.astral.sh/uv/)** — Gerenciador de pacotes Python
+- **[Ruff](https://docs.astral.sh/ruff/)** — Linter e formatador Python
+- **[Mypy](https://mypy-lang.org/)** — Verificação estática de tipos
