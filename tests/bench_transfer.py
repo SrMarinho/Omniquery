@@ -269,3 +269,51 @@ def test_bench_duckdb_insert(rows: int, repeat: int) -> None:
     results.append(("pandas DataFrame -> DuckDB", mn, mean, mx, ""))
 
     print_results(f"DuckDB insert strategies — {rows:,} rows", results)
+
+
+# ---------------------------------------------------------------------------
+# Benchmark 6: pandas chunk size vs DuckDB insert overhead
+# ---------------------------------------------------------------------------
+
+
+def test_bench_chunk_size(rows: int, repeat: int) -> None:
+    """Mede overhead de inserção no DuckDB variando o tamanho do chunk (simula _transfer_via_pandas)."""
+    src = duckdb.connect(":memory:")
+    src.execute(f"""
+        CREATE TABLE src AS
+        SELECT
+            i AS id,
+            'empresa_' || (i % 20) AS empresa,
+            DATE '2024-01-01' + (i % 365)::INTEGER AS data_emissao,
+            (random() * 100000)::DECIMAL(12,2) AS total_produtos,
+            (random() * 120000)::DECIMAL(12,2) AS total_liquido,
+            'NF' || lpad(i::VARCHAR, 8, '0') AS nota_fiscal,
+            repeat('x', 20) AS descricao
+        FROM range(1, {rows} + 1) t(i)
+    """)
+    df_full = src.execute("SELECT * FROM src").fetchdf()
+    results = []
+
+    for chunk_size in [100_000, 250_000, 500_000, 1_000_000, rows]:
+        if chunk_size > rows:
+            continue
+        label = f"chunk={chunk_size:,}"
+
+        def run(cs: int = chunk_size) -> None:
+            con = duckdb.connect(":memory:")
+            first = True
+            for start in range(0, rows, cs):
+                chunk = df_full.iloc[start : start + cs]
+                con.register("tmp", chunk)
+                if first:
+                    con.execute("CREATE TABLE t AS SELECT * FROM tmp")
+                    first = False
+                else:
+                    con.execute("INSERT INTO t SELECT * FROM tmp")
+                con.unregister("tmp")
+
+        mn, mean, mx = timeit(run, repeat)
+        n_chunks = (rows + chunk_size - 1) // chunk_size
+        results.append((label, mn, mean, mx, f"{n_chunks} chunks"))
+
+    print_results(f"Pandas chunk size — {rows:,} rows", results)
