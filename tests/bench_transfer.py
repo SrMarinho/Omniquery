@@ -73,15 +73,17 @@ def timeit(fn: Any, repeat: int) -> tuple[float, float, float]:
     return min(times), sum(times) / len(times), max(times)
 
 
-def print_results(title: str, results: list[tuple[str, float, float, float, str]]) -> None:
+def print_results(title: str, results: list[tuple[str, float, float, float, float, str]]) -> None:
     table = Table(title=title, border_style="cyan", show_lines=True)
     table.add_column("Operacao", style="bold white", min_width=35)
     table.add_column("Min", justify="right")
     table.add_column("Media", justify="right")
     table.add_column("Max", justify="right")
+    table.add_column("MB/s", justify="right", style="cyan")
     table.add_column("Nota", style="dim")
-    for name, mn, mean, mx, note in results:
-        table.add_row(name, f"{mn:.3f}s", f"{mean:.3f}s", f"{mx:.3f}s", note)
+    for name, mn, mean, mx, mb_s, note in results:
+        mb_s_str = f"{mb_s:,.1f}" if mb_s > 0 else "-"
+        table.add_row(name, f"{mn:.3f}s", f"{mean:.3f}s", f"{mx:.3f}s", mb_s_str, note)
     console.print()
     console.print(table)
     console.print()
@@ -95,16 +97,17 @@ def print_results(title: str, results: list[tuple[str, float, float, float, str]
 def test_bench_fetch_methods(db: duckdb.DuckDBPyConnection, rows: int, repeat: int) -> None:
     """Compara fetch_arrow_table vs fetchdf vs fetchall."""
     query = "SELECT * FROM dados"
+    data_mb = db.execute(query).fetch_arrow_table().nbytes / (1024 * 1024)
     results = []
 
     mn, mean, mx = timeit(lambda: db.execute(query).fetch_arrow_table(), repeat)
-    results.append(("fetch_arrow_table()", mn, mean, mx, "Arrow Table em memoria"))
+    results.append(("fetch_arrow_table()", mn, mean, mx, data_mb / mean, "Arrow Table em memoria"))
 
     mn, mean, mx = timeit(lambda: db.execute(query).fetchdf(), repeat)
-    results.append(("fetchdf()", mn, mean, mx, "pandas DataFrame"))
+    results.append(("fetchdf()", mn, mean, mx, data_mb / mean, "pandas DataFrame"))
 
     mn, mean, mx = timeit(lambda: db.execute(query).fetchall(), repeat)
-    results.append(("fetchall()", mn, mean, mx, "lista de tuplas Python"))
+    results.append(("fetchall()", mn, mean, mx, data_mb / mean, "lista de tuplas Python"))
 
     print_results(f"Fetch methods — {rows:,} rows", results)
 
@@ -122,14 +125,19 @@ def test_bench_arrow_to_csv(db: duckdb.DuckDBPyConnection, rows: int, repeat: in
     for batch_size in [50_000, 100_000, 250_000, 500_000, rows]:
         label = f"batch={batch_size:,}"
 
-        def run(bt: int = batch_size) -> None:
+        csv_mb_holder: list[float] = []
+
+        def run(bt: int = batch_size, holder: list[float] = csv_mb_holder) -> None:
             buf = io.BytesIO()
             opts = pa_csv.WriteOptions(include_header=False)
             for batch in arrow_table.to_batches(max_chunksize=bt):
                 pa_csv.write_csv(pa.Table.from_batches([batch]), buf, write_options=opts)
+            if not holder:
+                holder.append(buf.tell() / (1024 * 1024))
 
         mn, mean, mx = timeit(run, repeat)
-        results.append((label, mn, mean, mx, ""))
+        data_mb = csv_mb_holder[0] if csv_mb_holder else 0.0
+        results.append((label, mn, mean, mx, data_mb / mean if mean > 0 else 0.0, ""))
 
     print_results(f"Arrow -> CSV serialization — {rows:,} rows", results)
 
@@ -146,15 +154,21 @@ def test_bench_pipe_vs_bytesio(db: duckdb.DuckDBPyConnection, rows: int, repeat:
     results = []
 
     # BytesIO: acumula tudo em memória antes de "enviar"
+    csv_mb_holder: list[float] = []
+
     def via_bytesio() -> bytes:
         arrow_table = db.execute(query).fetch_arrow_table()
         buf = io.BytesIO()
         for batch in arrow_table.to_batches(max_chunksize=500_000):
             pa_csv.write_csv(pa.Table.from_batches([batch]), buf, write_options=write_opts)
-        return buf.getvalue()
+        data = buf.getvalue()
+        if not csv_mb_holder:
+            csv_mb_holder.append(len(data) / (1024 * 1024))
+        return data
 
     mn, mean, mx = timeit(via_bytesio, repeat)
-    results.append(("BytesIO (acumula em memoria)", mn, mean, mx, "sem paralelismo"))
+    data_mb = csv_mb_holder[0] if csv_mb_holder else 0.0
+    results.append(("BytesIO (acumula em memoria)", mn, mean, mx, data_mb / mean, "sem paralelismo"))
 
     # Pipe: writer thread + reader thread (simula o DatabaseOutput atual)
     def via_pipe() -> None:
@@ -181,7 +195,7 @@ def test_bench_pipe_vs_bytesio(db: duckdb.DuckDBPyConnection, rows: int, repeat:
             raise write_error[0]
 
     mn, mean, mx = timeit(via_pipe, repeat)
-    results.append(("Pipe anonimo (writer + reader threads)", mn, mean, mx, "simula COPY FROM STDIN"))
+    results.append(("Pipe anonimo (writer + reader threads)", mn, mean, mx, data_mb / mean, "simula COPY FROM STDIN"))
 
     print_results(f"Streaming strategies — {rows:,} rows", results)
 
@@ -202,23 +216,21 @@ def test_bench_timezone_strip(rows: int, repeat: int) -> None:
             (TIMESTAMP '2024-01-01 00:00:00' + INTERVAL (i % 86400) SECOND)       AS ts_no_tz
         FROM range(1, {rows} + 1) t(i)
     """)
+    data_mb = con.execute("SELECT ts_no_tz FROM tstz").fetch_arrow_table().nbytes / (1024 * 1024)
     results = []
 
-    # sem strip
     def without_strip() -> None:
         con.execute("SELECT ts_no_tz FROM tstz").fetch_arrow_table()
 
     mn, mean, mx = timeit(without_strip, repeat)
-    results.append(("fetch sem TIMESTAMPTZ", mn, mean, mx, ""))
+    results.append(("fetch sem TIMESTAMPTZ", mn, mean, mx, data_mb / mean, ""))
 
-    # com strip via cast DuckDB
     def with_duckdb_cast() -> None:
         con.execute("SELECT CAST(ts_with_tz AS TIMESTAMP) AS ts FROM tstz").fetch_arrow_table()
 
     mn, mean, mx = timeit(with_duckdb_cast, repeat)
-    results.append(("CAST(TIMESTAMPTZ AS TIMESTAMP) via SQL", mn, mean, mx, ""))
+    results.append(("CAST(TIMESTAMPTZ AS TIMESTAMP) via SQL", mn, mean, mx, data_mb / mean, ""))
 
-    # com strip via pyarrow
     def with_arrow_cast() -> pa.Table:
         tbl = con.execute("SELECT ts_with_tz FROM tstz").fetch_arrow_table()
         for i, field in enumerate(tbl.schema):
@@ -227,7 +239,7 @@ def test_bench_timezone_strip(rows: int, repeat: int) -> None:
         return tbl
 
     mn, mean, mx = timeit(with_arrow_cast, repeat)
-    results.append(("cast via PyArrow pos-fetch", mn, mean, mx, "abordagem atual"))
+    results.append(("cast via PyArrow pos-fetch", mn, mean, mx, data_mb / mean, "abordagem atual"))
 
     print_results(f"Timezone strip strategies — {rows:,} rows", results)
 
@@ -247,6 +259,8 @@ def test_bench_duckdb_insert(rows: int, repeat: int) -> None:
     """)
     arrow_table = src.execute("SELECT * FROM src").fetch_arrow_table()
     df = src.execute("SELECT * FROM src").fetchdf()
+    arrow_mb = arrow_table.nbytes / (1024 * 1024)
+    df_mb = df.memory_usage(deep=True).sum() / (1024 * 1024)
 
     results = []
 
@@ -257,7 +271,7 @@ def test_bench_duckdb_insert(rows: int, repeat: int) -> None:
         con.unregister("tmp")
 
     mn, mean, mx = timeit(insert_arrow, repeat)
-    results.append(("Arrow Table -> DuckDB", mn, mean, mx, ""))
+    results.append(("Arrow Table -> DuckDB", mn, mean, mx, arrow_mb / mean, ""))
 
     def insert_pandas() -> None:
         con = duckdb.connect(":memory:")
@@ -266,7 +280,7 @@ def test_bench_duckdb_insert(rows: int, repeat: int) -> None:
         con.unregister("tmp")
 
     mn, mean, mx = timeit(insert_pandas, repeat)
-    results.append(("pandas DataFrame -> DuckDB", mn, mean, mx, ""))
+    results.append(("pandas DataFrame -> DuckDB", mn, mean, mx, df_mb / mean, ""))
 
     print_results(f"DuckDB insert strategies — {rows:,} rows", results)
 
@@ -292,6 +306,7 @@ def test_bench_chunk_size(rows: int, repeat: int) -> None:
         FROM range(1, {rows} + 1) t(i)
     """)
     df_full = src.execute("SELECT * FROM src").fetchdf()
+    data_mb = df_full.memory_usage(deep=True).sum() / (1024 * 1024)
     results = []
 
     for chunk_size in [100_000, 250_000, 500_000, 1_000_000, rows]:
@@ -314,6 +329,6 @@ def test_bench_chunk_size(rows: int, repeat: int) -> None:
 
         mn, mean, mx = timeit(run, repeat)
         n_chunks = (rows + chunk_size - 1) // chunk_size
-        results.append((label, mn, mean, mx, f"{n_chunks} chunks"))
+        results.append((label, mn, mean, mx, data_mb / mean, f"{n_chunks} chunks"))
 
     print_results(f"Pandas chunk size — {rows:,} rows", results)
