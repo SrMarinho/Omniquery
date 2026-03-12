@@ -5,6 +5,7 @@ description = "A versatile data querying and processing tool."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "connectorx>=0.4.5",
     "duckdb>=1.4.4",
     "duckdb-engine>=0.17.0",
     "openpyxl>=3.1.5",
@@ -12,6 +13,7 @@ dependencies = [
     "pandas>=3.0.0",
     "pandas-stubs>=2.3.3.260113",
     "psycopg2>=2.9.11",
+    "pyarrow>=23.0.1",
     "pydantic>=2.12.5",
     "pyodbc>=5.3.0",
     "python-dotenv>=1.2.1",
@@ -24,6 +26,7 @@ dependencies = [
     "tqdm>=4.67.1",
     "types-pyyaml>=6.0.12.20250915",
     "types-sqlalchemy>=1.4.53.38",
+    "tzdata>=2025.3",
 ]
 
 [dependency-groups]
