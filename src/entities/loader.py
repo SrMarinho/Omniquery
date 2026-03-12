@@ -191,7 +191,7 @@ class DatabaseLoader(Loader):
         del arrow_table
 
     def _transfer_via_pandas(self, source_engine: Engine, to_engine: DuckDBPyConnection, table: Table) -> None:
-        """Le via pandas em chunks. Fallback para dialetos nao suportados pelo connectorx."""
+        """Le via pandas em chunks e converte para Arrow antes de inserir no DuckDB."""
         logger.info("[dim]%s[/dim] | %-30s  carregando...", self.source, table.alias)
 
         total_rows = 0
@@ -203,9 +203,11 @@ class DatabaseLoader(Loader):
             chunk_start = time.time()
             chunk_df.columns = chunk_df.columns.str.lower()
             chunk_rows = len(chunk_df)
+            chunk_arrow = pa.Table.from_pandas(chunk_df, preserve_index=False)
+            del chunk_df
 
             with _duckdb_lock:
-                to_engine.register(tmp_name, chunk_df)
+                to_engine.register(tmp_name, chunk_arrow)
                 if first_chunk:
                     to_engine.execute(f"CREATE OR REPLACE TABLE {table.alias} AS SELECT * FROM {tmp_name}")
                     first_chunk = False
@@ -223,7 +225,7 @@ class DatabaseLoader(Loader):
                 f"{chunk_rows:,}",
                 chunk_time,
             )
-            del chunk_df
+            del chunk_arrow
 
     def _transfer_via_turbodbc(self, connstr: str, to_engine: DuckDBPyConnection, table: Table) -> None:
         """Le via turbodbc -> Arrow -> DuckDB. Usado para Oracle via ODBC."""
