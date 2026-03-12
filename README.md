@@ -1,31 +1,35 @@
 # OmniQuery
 
-Ferramenta de ETL via YAML para consulta e processamento de dados entre múltiplas fontes. O OmniQuery usa **DuckDB** como motor intermediário em memória para carregar dados de origens diversas (bancos de dados, arquivos), transformar via SQL e exportar para diferentes destinos.
+Ferramenta de ETL via YAML para consulta e processamento de dados entre múltiplas fontes. O OmniQuery usa **DuckDB** como motor intermediário em memória: carrega dados de origens diversas, transforma via SQL e exporta para diferentes destinos.
 
 [![CI](https://github.com/SrMarinho/Omniquery/actions/workflows/ci.yml/badge.svg)](https://github.com/SrMarinho/Omniquery/actions/workflows/ci.yml)
 
-## Arquitetura
+## Como funciona
 
 ```
 ┌──────────────┐      ┌──────────────┐      ┌──────────────┐
-│   Sources     │ ──►  │  DuckDB      │ ──►  │   Outputs    │
-│  (Loaders)    │      │  (in-memory) │      │              │
+│   Loaders    │ ──►  │    DuckDB    │ ──►  │   Outputs    │
+│              │      │  (memória)   │      │              │
 ├──────────────┤      └──────────────┘      ├──────────────┤
-│ PostgreSQL    │                            │ PostgreSQL   │
-│ SQL Server    │                            │ CSV / XLSX   │
-│ Oracle        │                            │              │
-│ CSV / XLSX    │                            │              │
-└──────────────┘                            └──────────────┘
+│ PostgreSQL   │       SQL puro entre        │ PostgreSQL   │
+│ SQL Server   │       qualquer tabela       │ CSV / XLSX   │
+│ Oracle       │       carregada             │              │
+│ CSV / XLSX   │                             │              │
+└──────────────┘                             └──────────────┘
 ```
+
+Cada pipeline YAML define:
+1. **Loaders** — de onde buscar os dados e como nomeá-los no DuckDB
+2. **Outputs** — queries SQL sobre as tabelas carregadas e para onde enviar o resultado
 
 ## Pré-requisitos
 
 - Python 3.12+
-- [uv](https://docs.astral.sh/uv/) (gerenciador de pacotes)
-- Drivers de banco de dados conforme necessidade:
+- [uv](https://docs.astral.sh/uv/)
+- Drivers conforme os bancos usados:
   - **SQL Server**: ODBC Driver 17 for SQL Server
-  - **Oracle**: Oracle Instant Client
-  - **PostgreSQL**: libpq
+  - **Oracle**: Oracle Instant Client + driver ODBC
+  - **PostgreSQL**: libpq (geralmente já incluído)
 
 ## Instalação
 
@@ -37,114 +41,159 @@ uv sync
 
 ## Configuração
 
-### Variáveis de ambiente
+### 1. Variáveis de ambiente (`.env`)
 
 ```bash
 cp .env.example .env
-# Preencha com suas credenciais
 ```
 
-#### Credenciais de banco
-
-| Variável | Descrição |
-|---|---|
-| `DATABASE_*` | Conexão PostgreSQL |
-| `PROCFIT_DATABASE_*` | Conexão SQL Server (Procfit) |
-| `SENIOR_DATABASE_*` | Conexão Oracle (Senior) |
-
-#### Logging e tuning
+Preencha as credenciais dos bancos e ajuste os parâmetros de tuning conforme necessário:
 
 | Variável | Padrão | Descrição |
 |---|---|---|
 | `LOG_LEVEL` | `INFO` | Nível de log: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
-| `DB_CHUNK_SIZE` | `500000` | Linhas por chunk ao ler de banco de dados |
+| `DB_CHUNK_SIZE` | `500000` | Linhas por chunk ao ler via pandas (Oracle fallback) |
 | `DB_THREADS` | `4` | Threads do DuckDB |
 | `DB_MEMORY_LIMIT` | `4GB` | Limite de memória do DuckDB |
-| `FILE_CHUNK_SIZE` | `100000` | Linhas por chunk ao escrever CSV |
-| `DB_BATCH_SIZE` | `500000` | Linhas por batch ao escrever em banco de dados |
+| `PIPELINE_WORKERS` | `4` | Tabelas carregadas em paralelo por loader |
+| `PG_WORK_MEM` | `256MB` | `work_mem` por sessão no PostgreSQL de destino |
+| `PG_MAINTENANCE_WORK_MEM` | `1GB` | `maintenance_work_mem` por sessão no PostgreSQL |
+| `ORACLE_ODBC_DRIVER` | `Oracle` | Nome do driver ODBC instalado para Oracle |
 
-### Bancos de dados (`databases.yaml`)
+### 2. Conexões de banco (`databases.yaml`)
 
-Define as connection strings. As variáveis entre `{{ }}` são substituídas pelas variáveis de ambiente do `.env`:
+Define as connection strings. As variáveis entre `{{ }}` são substituídas pelo `.env`:
 
 ```yaml
 postgresql:
   connection_string: "postgresql://{{DATABASE_USER}}:{{DATABASE_PASSWORD}}@{{DATABASE_HOST}}:{{DATABASE_PORT}}/{{DATABASE_NAME}}"
 
 procfit:
-  connection_string: "mssql+pyodbc://{{PROCFIT_DATABASE_USER}}:...@{{PROCFIT_DATABASE_HOST}}/{{PROCFIT_DATABASE_NAME}}?driver=ODBC+Driver+17+for+SQL+Server"
+  connection_string: "mssql+pyodbc://{{PROCFIT_DATABASE_USER}}:{{PROCFIT_DATABASE_PASSWORD}}@{{PROCFIT_DATABASE_HOST}}/{{PROCFIT_DATABASE_NAME}}?driver=ODBC+Driver+17+for+SQL+Server"
+
+senior:
+  connection_string: "oracle+oracledb://{{SENIOR_DATABASE_USER}}:{{SENIOR_DATABASE_PASSWORD}}@{{SENIOR_DATABASE_HOST}}:{{SENIOR_DATABASE_PORT}}/{{SENIOR_DATABASE_NAME}}"
 ```
 
 ## Uso
 
 ```bash
+# Listar pipelines disponíveis
+uv run main.py list
+
 # Executar um pipeline
-uv run main.py --pipeline pipelines/meu_pipeline.yaml
+uv run main.py pipelines/meu_pipeline.yaml
 
 # Executar com parâmetros dinâmicos
-uv run main.py --pipeline pipelines/relatorio.yaml --data_inicio 2024-01-01 --data_fim 2024-12-31
+uv run main.py pipelines/relatorio.yaml --data_inicio 2024-01-01 --data_fim 2024-12-31
+
+# Ver os parâmetros aceitos por um pipeline
+uv run main.py pipelines/relatorio.yaml --help
 
 # Validar o pipeline sem executar (dry-run)
-uv run main.py --pipeline pipelines/relatorio.yaml --dry-run
-
-# Ver ajuda e parâmetros disponíveis de um pipeline
-uv run main.py --pipeline pipelines/relatorio.yaml --help
+uv run main.py pipelines/relatorio.yaml --dry-run
 ```
 
-## Pipelines
+## Escrevendo pipelines
 
-Os pipelines são definidos em arquivos YAML na pasta `pipelines/`. A extensão [YAML (Red Hat)](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) no VS Code ativa autocompletar e validação automática via o schema em `schemas/pipeline.schema.json`.
+Os pipelines ficam em `pipelines/`. A extensão [YAML (Red Hat)](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) no VS Code ativa autocompletar e validação via `schemas/pipeline.schema.json`.
 
-### Estrutura
+### Estrutura completa
 
 ```yaml
 name: nome_do_pipeline
 description: Descrição opcional
 
+# Parâmetros aceitos pela CLI e substituídos no YAML via {{ nome }}
 parameters:
-  - name: data_inicio       # Disponível como --data_inicio na CLI e {{ data_inicio }} no YAML
+  - name: data_inicio
     type: date              # string | integer | float | boolean | date
     required: true
     description: Data de início (YYYY-MM-DD)
 
+  - name: data_fim
+    type: date
+    required: true
+    description: Data de fim (YYYY-MM-DD)
+
+# Fontes de dados — cada tabela vira uma view no DuckDB
 loads:
-  - type: database          # "database" ou "file"
-    source: procfit         # Nome do banco definido em databases.yaml
+  - type: database
+    source: procfit         # Nome definido em databases.yaml
     tables:
-      - alias: vendas       # Nome da tabela no DuckDB (referenciado nos outputs)
-        description: Opcional
-        type: inline        # "inline" (SQL direto) ou "sql" (caminho de arquivo .sql)
+      - alias: vendas       # Como a tabela será chamada no DuckDB
+        type: inline        # "inline" (SQL direto) ou "sql" (arquivo .sql)
         content: |
           SELECT * FROM PEDIDOS
           WHERE DATA >= '{{ data_inicio }}'
+          AND DATA <= '{{ data_fim }}'
+
+  - type: database
+    source: senior
+    tables:
+      - alias: compras
+        type: inline
+        content: SELECT * FROM COMPRAS
 
   - type: file
-    source: data/metas.csv
+    source: data/metas.csv  # CSV ou XLSX
     tables:
       - alias: metas
 
+# Destinos — queries sobre as tabelas carregadas acima
 outputs:
   - type: database
-    name: relatorio_vendas  # Tabela de destino no banco
+    name: relatorio_vendas  # Tabela criada no banco de destino
+    output_database: postgresql
     query: |
       SELECT v.*, m.meta
       FROM vendas v
       LEFT JOIN metas m ON v.setor = m.setor
-    output_database: postgresql  # Banco definido em databases.yaml
     options:
-      if_exists: replace    # "replace" ou "append"
+      if_exists: replace    # "replace" (padrão) ou "append"
 
   - type: file
-    name: outputs/relatorio.xlsx  # Formato inferido pela extensão (.csv, .xlsx, .xls)
+    name: outputs/relatorio.xlsx  # Extensão define o formato: .csv ou .xlsx
     query: SELECT * FROM vendas
 ```
 
 ### Parâmetros dinâmicos
 
-Parâmetros declarados em `parameters:` são injetados na CLI como flags (`--nome_param`) e substituídos no YAML via `{{ nome_param }}` antes da execução.
+Parâmetros declarados em `parameters:` viram flags na CLI (`--nome_param`) e são substituídos no YAML via `{{ nome_param }}` antes da execução.
 
 ```bash
-uv run main.py --pipeline pipelines/relatorio.yaml --data_inicio 2024-01-01 --data_fim 2024-12-31
+uv run main.py pipelines/relatorio.yaml --data_inicio 2024-01-01 --data_fim 2024-12-31
+```
+
+### SQL em arquivo separado
+
+Para queries longas, use `type: sql` e aponte para um arquivo `.sql`:
+
+```yaml
+tables:
+  - alias: vendas
+    type: sql
+    content: queries/vendas.sql
+```
+
+## Internals de performance
+
+O OmniQuery foi otimizado para transferências de alta volumetria:
+
+| Caminho | Tecnologia | Quando |
+|---|---|---|
+| SQL Server / PostgreSQL → DuckDB | connectorx + Arrow (zero-copy) | Padrão para esses dialetos |
+| Oracle → DuckDB | turbodbc + Arrow | Se turbodbc estiver instalado |
+| Oracle → DuckDB | pandas + Arrow | Fallback automático |
+| DuckDB → PostgreSQL | Arrow → BytesIO → `COPY FROM STDIN` | Sempre |
+| DuckDB → CSV | `COPY TO` nativo do DuckDB | Sempre |
+
+Tabelas de uma mesma fonte são carregadas em paralelo (controlado por `PIPELINE_WORKERS`).
+
+Os logs de execução mostram rows/s e MB/s por tabela para facilitar diagnóstico:
+
+```
+procfit | nf_faturamento          998,621 rows  11.18s  89,295 r/s  12.0 MB/s
 ```
 
 ## Estrutura do projeto
@@ -152,25 +201,25 @@ uv run main.py --pipeline pipelines/relatorio.yaml --data_inicio 2024-01-01 --da
 ```
 omniquery/
 ├── cli/
-│   └── commands.py              # CLI com Rich — argumentos dinâmicos por pipeline
+│   └── commands.py              # Parser de argumentos com Rich — dinâmico por pipeline
 ├── pipelines/                   # Definições de pipelines YAML
 ├── schemas/
 │   └── pipeline.schema.json     # JSON Schema para autocompletar no VS Code
 ├── scripts/
 │   └── validate_pipelines.py    # Valida todos os pipelines contra o schema
-├── data/                        # Arquivos de dados de entrada
-├── outputs/                     # Arquivos de saída gerados
 ├── tests/
-│   ├── conftest.py              # Fixtures compartilhadas
-│   ├── test_app.py              # Testes de App._substitute_parameters
-│   ├── test_entities.py         # Testes de Parameter, Table, Factories, Pipeline
-│   └── test_utils.py            # Testes de substitute_env_variables
+│   ├── conftest.py              # Fixtures e opções CLI de benchmark
+│   ├── bench_transfer.py        # Benchmarks de performance (--rows, --repeat)
+│   ├── test_app.py
+│   ├── test_entities.py
+│   └── test_utils.py
 ├── src/
 │   ├── app.py                   # Orquestrador principal
-│   ├── exceptions.py            # Hierarquia de exceções customizadas
+│   ├── exceptions.py            # Hierarquia de exceções
 │   ├── config/
-│   │   ├── database.py          # Conexão DuckDB in-memory
-│   │   └── settings.py          # Constantes e variáveis de ambiente
+│   │   ├── database.py          # Instância global do DuckDB in-memory
+│   │   ├── logging_config.py    # Configuração do Rich logging
+│   │   └── settings.py          # Variáveis de ambiente e constantes
 │   ├── entities/
 │   │   ├── loader.py            # DatabaseLoader, FileLoader, LoaderFactory
 │   │   ├── output.py            # DatabaseOutput, FileOutput, OutputFactory
@@ -179,21 +228,11 @@ omniquery/
 │   │   └── table.py             # Modelo de tabela
 │   └── utils/
 │       ├── database_config_reader.py  # Leitor de databases.yaml
-│       └── retry.py                   # Retry com backoff exponencial (tenacity)
+│       └── retry.py                   # Retry com backoff exponencial
 ├── databases.yaml               # Configuração de conexões
 ├── main.py                      # Entrypoint
 └── pyproject.toml
 ```
-
-## CI/CD
-
-O GitHub Actions executa 3 jobs a cada push ou PR:
-
-| Job | O que faz |
-|---|---|
-| **Lint & Type Check** | Ruff (lint + format) e Mypy |
-| **Tests** | pytest com todos os testes unitários |
-| **Validate Pipeline YAMLs** | Valida todos os arquivos de `pipelines/` contra o JSON Schema — impede pipelines inválidos de chegarem em produção |
 
 ## Desenvolvimento
 
@@ -204,42 +243,48 @@ uv sync --group dev
 # Rodar testes
 uv run pytest tests/ -v
 
+# Rodar benchmarks de performance
+uv run pytest tests/bench_transfer.py -s -v
+uv run pytest tests/bench_transfer.py -s -v --rows=1000000 --repeat=5
+
 # Validar pipelines localmente
 uv run python scripts/validate_pipelines.py
 
-# Lint
-uv run ruff check .
+# Lint, format e tipos
 uv run ruff check . --fix
-
-# Formatação
 uv run ruff format .
-
-# Verificação de tipos
 uv run mypy src/ cli/ main.py
 ```
 
 ### Pre-commit
 
-O projeto usa [pre-commit](https://pre-commit.com/) para garantir qualidade antes de cada commit:
-
 ```bash
 uv run pre-commit install
 ```
 
-Hooks configurados: Ruff (lint + format), Mypy, trailing whitespace, end-of-file.
+Hooks: Ruff (lint + format), Mypy, trailing whitespace, end-of-file.
+
+## CI/CD
+
+| Job | O que faz |
+|---|---|
+| **Lint & Type Check** | Ruff + Mypy |
+| **Tests** | pytest com testes unitários |
+| **Validate Pipeline YAMLs** | Valida todos os arquivos de `pipelines/` contra o JSON Schema |
 
 ## Tecnologias
 
 | Biblioteca | Uso |
 |---|---|
-| [DuckDB](https://duckdb.org/) | Banco analítico in-memory para processamento intermediário |
+| [DuckDB](https://duckdb.org/) | Motor analítico in-memory |
+| [connectorx](https://github.com/sfu-db/connector-x) | Leitura rápida SQL Server/PostgreSQL → Arrow |
+| [PyArrow](https://arrow.apache.org/docs/python/) | Transferência zero-copy entre loaders e outputs |
 | [SQLAlchemy](https://www.sqlalchemy.org/) | Conexão com bancos relacionais |
-| [Pydantic](https://docs.pydantic.dev/) | Validação de dados e modelos |
-| [Pandas](https://pandas.pydata.org/) | Transferência em chunks entre fontes |
-| [Rich](https://github.com/Textualize/rich) | CLI com formatação visual e logging colorido |
-| [Tenacity](https://tenacity.readthedocs.io/) | Retry com backoff exponencial para conexões |
-| [tqdm](https://tqdm.github.io/) | Barra de progresso nas transferências |
-| [uv](https://docs.astral.sh/uv/) | Gerenciador de pacotes e ambientes |
+| [Pydantic](https://docs.pydantic.dev/) | Validação dos modelos de pipeline |
+| [Pandas](https://pandas.pydata.org/) | Fallback para leitura chunked (Oracle) |
+| [Rich](https://github.com/Textualize/rich) | CLI colorida e logging formatado |
+| [Tenacity](https://tenacity.readthedocs.io/) | Retry com backoff exponencial |
+| [uv](https://docs.astral.sh/uv/) | Gerenciador de pacotes |
 | [Ruff](https://docs.astral.sh/ruff/) | Linter e formatador |
 | [Mypy](https://mypy-lang.org/) | Verificação estática de tipos |
 | [pytest](https://pytest.org/) | Framework de testes |
