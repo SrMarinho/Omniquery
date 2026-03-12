@@ -1,13 +1,10 @@
 import io
 import logging
-import os
-import threading
 import time
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import pyarrow as pa
 import pyarrow.csv as pa_csv
 from duckdb import DuckDBPyConnection
 from pydantic import BaseModel, Field
@@ -83,7 +80,7 @@ class DatabaseOutput(Output):
     output_database: str = Field(default="postgresql")
 
     def _transfer(self, source_database: DuckDBPyConnection, output_database: Engine, name: str, query: str) -> None:
-        """Transfere DuckDB -> PostgreSQL via pipe anonimo usando Arrow batches e COPY FROM STDIN."""
+        """Transfere DuckDB -> PostgreSQL via BytesIO usando Arrow e COPY FROM STDIN."""
         conn = output_database.raw_connection()
 
         try:
@@ -98,6 +95,8 @@ class DatabaseOutput(Output):
             with memory_database_lock:
                 describe = source_database.execute(f"DESCRIBE SELECT * FROM ({query}) __q")
                 schema_info = describe.fetchall()
+                arrow_table = source_database.execute(query).fetch_arrow_table()
+
             columns = [row[0].lower() for row in schema_info]
             columns_def = ", ".join(f'"{row[0].lower()}" {_duckdb_type_to_pg(row[1])}' for row in schema_info)
             cur.execute(f"CREATE UNLOGGED TABLE {name} ({columns_def})")
@@ -106,34 +105,15 @@ class DatabaseOutput(Output):
             columns_sql = ", ".join(f'"{col}"' for col in columns)
             transfer_start = time.time()
 
-            r_fd, w_fd = os.pipe()
-            write_error: list[Exception] = []
+            buf = io.BytesIO()
             write_opts = pa_csv.WriteOptions(include_header=False)
+            pa_csv.write_csv(arrow_table, buf, write_options=write_opts)
+            buf.seek(0)
 
-            def _write_batches() -> None:
-                try:
-                    with os.fdopen(w_fd, "wb") as wf:
-                        with memory_database_lock:
-                            arrow_table = source_database.execute(query).fetch_arrow_table()
-                        for batch in arrow_table.to_batches(max_chunksize=500_000):
-                            buf = io.BytesIO()
-                            pa_csv.write_csv(pa.Table.from_batches([batch]), buf, write_options=write_opts)
-                            wf.write(buf.getvalue())
-                except Exception as exc:
-                    write_error.append(exc)
-
-            writer = threading.Thread(target=_write_batches, daemon=True)
-            writer.start()
-
-            with os.fdopen(r_fd, "rb") as rf:
-                cur.copy_expert(  # type: ignore[attr-defined]
-                    f"COPY {name} ({columns_sql}) FROM STDIN WITH (FORMAT CSV)",
-                    rf,
-                )
-
-            writer.join()
-            if write_error:
-                raise write_error[0]
+            cur.copy_expert(  # type: ignore[attr-defined]
+                f"COPY {name} ({columns_sql}) FROM STDIN WITH (FORMAT CSV)",
+                buf,
+            )
 
             conn.commit()
 
