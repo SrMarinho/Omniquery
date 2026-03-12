@@ -15,8 +15,7 @@ wheels/
 !.env.example
 
 # IDE-specific files
-.vscode/*
-!.vscode/settings.json
+.vscode/
 .idea/
 *.iml
 
