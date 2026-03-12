@@ -26,9 +26,7 @@ class Pipeline(BaseModel):
     def _run_parallel(self, items: list, label: str) -> None:
         if not items:
             return
-        tag = f"[pipeline:{self.name or 'pipeline'}]"
         workers = min(PIPELINE_WORKERS, len(items))
-        logger.debug("%s Running %d %s with %d worker(s)", tag, len(items), label, workers)
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {executor.submit(item.run): item for item in items}
             for future in as_completed(futures):

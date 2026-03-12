@@ -26,6 +26,7 @@ dependencies = [
     "tqdm>=4.67.1",
     "types-pyyaml>=6.0.12.20250915",
     "types-sqlalchemy>=1.4.53.38",
+    "tzdata>=2025.3",
 ]
 
 [dependency-groups]

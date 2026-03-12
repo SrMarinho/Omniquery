@@ -28,15 +28,15 @@ class App:
                     k: v.isoformat() if hasattr(v, "isoformat") else str(v) for k, v in pipeline_params.items()
                 }
                 raw = self._substitute_parameters(raw, params_str)
-                logger.debug("Parâmetros aplicados: %s", params_str)
+                logger.debug("params: %s", params_str)
             self.pipeline = Pipeline(**raw, **kwargs)
         except ValidationError as e:
             errors = e.errors()
-            logger.error("Pipeline YAML inválido — %d erro(s) encontrado(s):", len(errors))
+            logger.error("Pipeline invalido -- %d erro(s):", len(errors))
             for err in errors:
-                field = " → ".join(str(loc) for loc in err["loc"])
-                logger.error("  Campo '%s': %s", field, err["msg"])
-            raise PipelineError(f"Pipeline inválido: {self.pipeline_args}") from e
+                field = " -> ".join(str(loc) for loc in err["loc"])
+                logger.error("  '%s': %s", field, err["msg"])
+            raise PipelineError(f"Pipeline invalido: {self.pipeline_args}") from e
 
     def load_pipeline(self) -> dict[str, Any]:
         if isinstance(self.pipeline_args, str):
@@ -51,7 +51,7 @@ class App:
         def replace_match(match: re.Match) -> str:  # type: ignore[type-arg]
             key = str(match.group(1)).strip()
             if key not in params:
-                logger.warning("Parâmetro '{{ %s }}' não foi fornecido via CLI", key)
+                logger.warning("parametro '{{ %s }}' nao fornecido", key)
                 return str(match.group(0))
             return params[key]
 
@@ -64,48 +64,47 @@ class App:
         return data
 
     def pipeline_parameters(self) -> dict:  # type: ignore[type-arg]
-        """Retorna os parâmetros do pipeline, se existirem."""
+        """Retorna os parametros do pipeline, se existirem."""
         return getattr(self.pipeline, "parameters", {})
 
     def _print_dry_run_summary(self) -> None:
         p = self.pipeline
-        logger.info("DRY RUN — pipeline: %s", p.name or "(sem nome)")
+        logger.info("dry-run: [bold]%s[/bold]", p.name or "(sem nome)")
         if p.description:
-            logger.info("  Descrição: %s", p.description)
-        logger.info("  Loaders (%d):", len(p.loads))
+            logger.info("  %s", p.description)
+        logger.info("  loaders (%d):", len(p.loads))
         for loader in p.loads:
-            logger.info("    [%s] source=%s — %d tabela(s)", loader.type, loader.source, len(loader.tables))
+            logger.info("    [%s] %s -- %d tabela(s)", loader.type, loader.source, len(loader.tables))
             for table in loader.tables:
-                logger.info("      • %s", table.alias)
-        logger.info("  Outputs (%d):", len(p.outputs))
+                logger.info("      - %s", table.alias)
+        logger.info("  outputs (%d):", len(p.outputs))
         for output in p.outputs:
-            logger.info("    [%s] name=%s", output.type, output.name)
+            logger.info("    [%s] %s", output.type, output.name)
         if p.parameters:
-            logger.info("  Parâmetros (%d):", len(p.parameters))
+            logger.info("  parametros (%d):", len(p.parameters))
             for param in p.parameters:
-                logger.info("      • %s (%s)", param.name, param.type)
+                logger.info("      - %s (%s)", param.name, param.type)
 
     def run(self) -> None:
         name = self.pipeline.name or "pipeline"
-        tag = f"[pipeline:{name}]"
 
         if self.dry_run:
-            logger.info("%s Dry-run — valid, no execution", tag)
+            logger.info("[bold]%s[/bold] dry-run -- ok", name)
             self._print_dry_run_summary()
             memory_database.close()
             return
 
         n_loads = len(self.pipeline.loads)
         n_outputs = len(self.pipeline.outputs)
-        logger.info("%s Starting — %d loader(s), %d output(s)", tag, n_loads, n_outputs)
+        logger.info("[bold cyan]%s[/bold cyan] | %d loader(s), %d output(s)", name, n_loads, n_outputs)
 
         start_time = time.time()
         try:
             self.pipeline.run()
         except Exception as e:
-            logger.error("%s Failed — %s", tag, e)
+            logger.error("[bold]%s[/bold] | falhou -- %s", name, e)
             raise
         finally:
             total_time = time.time() - start_time
-            logger.info("%s Completed in %.2fs", tag, total_time)
+            logger.info("[bold cyan]%s[/bold cyan] | concluido em [bold]%.2fs[/bold]", name, total_time)
             memory_database.close()

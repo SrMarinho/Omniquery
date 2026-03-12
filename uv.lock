@@ -555,6 +555,7 @@ dependencies = [
     { name = "tqdm" },
     { name = "types-pyyaml" },
     { name = "types-sqlalchemy" },
+    { name = "tzdata" },
 ]
 
 [package.dev-dependencies]
@@ -589,6 +590,7 @@ requires-dist = [
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20250915" },
     { name = "types-sqlalchemy", specifier = ">=1.4.53.38" },
+    { name = "tzdata", specifier = ">=2025.3" },
 ]
 
 [package.metadata.requires-dev]
