@@ -85,7 +85,7 @@ def create_base_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "pipeline",
         nargs="?",
-        help="Caminho para o arquivo YAML da pipeline",
+        help="Caminho para o arquivo YAML da pipeline, ou 'list' para listar pipelines disponíveis",
     )
     parser.add_argument(
         "--dry-run",
@@ -153,25 +153,22 @@ def _resolve_pipeline_path(pipeline_arg: str) -> str | None:
 
 
 def parse_args() -> argparse.Namespace:
-    """
-    Analisa os argumentos da linha de comando.
-    Suporta -h tanto sem pipeline (help geral) quanto com pipeline (help específico).
-    """
+    """Analisa os argumentos da linha de comando."""
     parser = create_base_parser()
 
     if len(sys.argv) == 1 or (len(sys.argv) == 2 and sys.argv[1] in ["-h", "--help"]):
         print_banner()
-        print_available_pipelines()
-        console.print()
         parser.print_help()
+        sys.exit(0)
+
+    if len(sys.argv) > 1 and sys.argv[1] == "list":
+        print_available_pipelines()
         sys.exit(0)
 
     if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
         pipeline_arg = sys.argv[1]
-
         try:
             pipeline_path = _resolve_pipeline_path(pipeline_arg)
-
             if pipeline_path:
                 pipeline_loaded = load_pipeline(pipeline_path)
                 pipeline_name = os.path.splitext(os.path.basename(pipeline_path))[0]
@@ -185,7 +182,6 @@ def parse_args() -> argparse.Namespace:
                 console.print(f"[bold red]✗[/bold red] Pipeline não encontrada: [yellow]{pipeline_arg}[/yellow]")
                 print_available_pipelines()
                 sys.exit(1)
-
         except Exception as e:
             console.print(f"[bold red]✗[/bold red] Erro ao carregar pipeline: [red]{e}[/red]")
             sys.exit(1)
