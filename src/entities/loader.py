@@ -141,36 +141,38 @@ class DatabaseLoader(Loader):
 
         try:
             if cx_url:
-                self._transfer_via_arrow(cx_url, to_engine, table)
+                data_bytes = self._transfer_via_arrow(cx_url, to_engine, table)
             elif turbodbc_connstr and _TURBODBC_AVAILABLE:
                 try:
-                    self._transfer_via_turbodbc(turbodbc_connstr, to_engine, table)
+                    data_bytes = self._transfer_via_turbodbc(turbodbc_connstr, to_engine, table)
                 except Exception as e:
                     logger.warning(
                         "[dim]%s[/dim] | %s -- turbodbc falhou (%s), usando pandas", self.source, table.alias, e
                     )
-                    self._transfer_via_pandas(source_engine, to_engine, table)
+                    data_bytes = self._transfer_via_pandas(source_engine, to_engine, table)
             else:
-                self._transfer_via_pandas(source_engine, to_engine, table)
+                data_bytes = self._transfer_via_pandas(source_engine, to_engine, table)
 
             transfer_time = time.time() - transfer_start
             with _duckdb_lock:
                 total_rows = to_engine.execute(f"SELECT COUNT(*) FROM {table.alias}").fetchone()[0]  # type: ignore[index]
             avg_speed = total_rows / transfer_time if transfer_time > 0 else 0
+            mb_s = data_bytes / transfer_time / (1024 * 1024) if transfer_time > 0 else 0
             logger.info(
-                "[dim]%s[/dim] | %-30s  %10s rows  %6.2fs  %s r/s",
+                "[dim]%s[/dim] | %-30s  %10s rows  %6.2fs  %s r/s  %.1f MB/s",
                 self.source,
                 table.alias,
                 f"{total_rows:,}",
                 transfer_time,
                 f"{avg_speed:,.0f}",
+                mb_s,
             )
 
         except Exception as e:
             logger.error("[dim]%s[/dim] | %s -- %s", self.source, table.alias, e)
             raise LoaderError(f"Failed to transfer table '{table.alias}'") from e
 
-    def _transfer_via_arrow(self, cx_url: str, to_engine: DuckDBPyConnection, table: Table) -> None:
+    def _transfer_via_arrow(self, cx_url: str, to_engine: DuckDBPyConnection, table: Table) -> int:
         """Le via connectorx -> Arrow -> DuckDB. Remove timezone de colunas timestamp para evitar dependencia de ICU tzdata."""
         arrow_table: pa.Table = cx.read_sql(cx_url, table.content, return_type="arrow")  # type: ignore[assignment]
         arrow_table = arrow_table.rename_columns([c.lower() for c in arrow_table.column_names])
@@ -183,18 +185,21 @@ class DatabaseLoader(Loader):
             idx = arrow_table.schema.get_field_index(col_name)
             arrow_table = arrow_table.set_column(idx, col_name, col_data)
 
+        data_bytes = int(arrow_table.nbytes)
         tmp_name = f"__cx_{threading.get_ident()}"
         with _duckdb_lock:
             to_engine.register(tmp_name, arrow_table)
             to_engine.execute(f"CREATE OR REPLACE TABLE {table.alias} AS SELECT * FROM {tmp_name}")
             to_engine.unregister(tmp_name)
         del arrow_table
+        return data_bytes
 
-    def _transfer_via_pandas(self, source_engine: Engine, to_engine: DuckDBPyConnection, table: Table) -> None:
+    def _transfer_via_pandas(self, source_engine: Engine, to_engine: DuckDBPyConnection, table: Table) -> int:
         """Le via pandas em chunks e converte para Arrow antes de inserir no DuckDB."""
         logger.info("[dim]%s[/dim] | %-30s  carregando...", self.source, table.alias)
 
         total_rows = 0
+        total_bytes = 0
         first_chunk = True
         chunks = pd.read_sql(table.content, source_engine, chunksize=DB_CHUNK_SIZE)
         tmp_name = f"__pd_{threading.get_ident()}"
@@ -205,6 +210,7 @@ class DatabaseLoader(Loader):
             chunk_rows = len(chunk_df)
             chunk_arrow = pa.Table.from_pandas(chunk_df, preserve_index=False)
             del chunk_df
+            total_bytes += chunk_arrow.nbytes
 
             with _duckdb_lock:
                 to_engine.register(tmp_name, chunk_arrow)
@@ -227,7 +233,9 @@ class DatabaseLoader(Loader):
             )
             del chunk_arrow
 
-    def _transfer_via_turbodbc(self, connstr: str, to_engine: DuckDBPyConnection, table: Table) -> None:
+        return total_bytes
+
+    def _transfer_via_turbodbc(self, connstr: str, to_engine: DuckDBPyConnection, table: Table) -> int:
         """Le via turbodbc -> Arrow -> DuckDB. Usado para Oracle via ODBC."""
         conn = _turbodbc.connect(connection_string=connstr)
         try:
@@ -238,12 +246,14 @@ class DatabaseLoader(Loader):
         finally:
             conn.close()
 
+        data_bytes = int(arrow_table.nbytes)
         tmp_name = f"__td_{threading.get_ident()}"
         with _duckdb_lock:
             to_engine.register(tmp_name, arrow_table)
             to_engine.execute(f"CREATE OR REPLACE TABLE {table.alias} AS SELECT * FROM {tmp_name}")
             to_engine.unregister(tmp_name)
         del arrow_table
+        return data_bytes
 
 
 class FileLoader(Loader):

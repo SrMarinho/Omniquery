@@ -106,6 +106,7 @@ class DatabaseOutput(Output):
             with memory_database_lock:
                 arrow_table = source_database.execute(query).fetch_arrow_table()
 
+            data_bytes = arrow_table.nbytes
             buf = io.BytesIO()
             write_opts = pa_csv.WriteOptions(include_header=False)
             pa_csv.write_csv(arrow_table, buf, write_options=write_opts)
@@ -123,13 +124,15 @@ class DatabaseOutput(Output):
 
             transfer_time = time.time() - transfer_start
             avg_speed = total_rows / transfer_time if transfer_time > 0 else 0
+            mb_s = data_bytes / transfer_time / (1024 * 1024) if transfer_time > 0 else 0
 
             logger.info(
-                "[dim]-> %s[/dim] | [bold green]ok[/bold green]  %10s rows  %6.2fs  %s r/s",
+                "[dim]-> %s[/dim] | [bold green]ok[/bold green]  %10s rows  %6.2fs  %s r/s  %.1f MB/s",
                 name,
                 f"{total_rows:,}",
                 transfer_time,
                 f"{avg_speed:,.0f}",
+                mb_s,
             )
 
         except OmniQueryError:
