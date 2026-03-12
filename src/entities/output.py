@@ -93,9 +93,7 @@ class DatabaseOutput(Output):
                 cur.execute(f"DROP TABLE IF EXISTS {name}")
 
             with memory_database_lock:
-                describe = source_database.execute(f"DESCRIBE SELECT * FROM ({query}) __q")
-                schema_info = describe.fetchall()
-                arrow_table = source_database.execute(query).fetch_arrow_table()
+                schema_info = source_database.execute(f"DESCRIBE SELECT * FROM ({query}) __q").fetchall()
 
             columns = [row[0].lower() for row in schema_info]
             columns_def = ", ".join(f'"{row[0].lower()}" {_duckdb_type_to_pg(row[1])}' for row in schema_info)
@@ -104,6 +102,9 @@ class DatabaseOutput(Output):
 
             columns_sql = ", ".join(f'"{col}"' for col in columns)
             transfer_start = time.time()
+
+            with memory_database_lock:
+                arrow_table = source_database.execute(query).fetch_arrow_table()
 
             buf = io.BytesIO()
             write_opts = pa_csv.WriteOptions(include_header=False)
