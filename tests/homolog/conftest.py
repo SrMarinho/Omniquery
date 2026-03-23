@@ -14,7 +14,9 @@ Flags úteis:
 
 from __future__ import annotations
 
+import io
 import os
+import sys
 import threading
 import time
 from collections.abc import Generator
@@ -27,7 +29,11 @@ import pytest
 from rich.console import Console
 from rich.table import Table
 
-console = Console()
+console = Console(
+    file=io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace"),
+    width=160,
+    highlight=False,
+)
 
 # ---------------------------------------------------------------------------
 # CLI options (--rows e --repeat já registrados em tests/conftest.py)
