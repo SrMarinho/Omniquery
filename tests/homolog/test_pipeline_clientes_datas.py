@@ -114,4 +114,4 @@ def test_e2e_clientes_datas_idempotente(
         count_2 = conn.execute(text("SELECT COUNT(*) FROM clientes_datas")).scalar() or 0
 
     assert count_1 == count_2, f"Pipeline não é idempotente: primeira execução={count_1}, segunda={count_2}"
-    print(f"\n  ✓ Idempotência confirmada: {count_1:,} linhas em ambas execuções")
+    print(f"\n  OK Idempotencia confirmada: {count_1:,} linhas em ambas execucoes")

@@ -26,7 +26,7 @@ def test_connection_procfit(require_procfit: None) -> None:
 
     assert result is not None
     assert result[0] == 1
-    print(f"\n  ✓ Procfit conectado: {config['connection_string'].split('@')[-1]}")
+    print(f"\n  OK Procfit conectado: {config['connection_string'].split('@')[-1]}")
 
 
 @pytest.mark.homolog
@@ -52,7 +52,7 @@ def test_connection_postgresql(require_postgresql: None) -> None:
         conn.close()
 
     assert version is not None
-    print(f"\n  ✓ PostgreSQL conectado: {version.split(',')[0]}")
+    print(f"\n  OK PostgreSQL conectado: {version.split(',')[0]}")
 
 
 @pytest.mark.homolog
@@ -73,7 +73,7 @@ def test_connection_oracle_real(require_senior: None) -> None:
         result = conn.execute(text("SELECT 1 FROM DUAL")).fetchone()
 
     assert result is not None
-    print(f"\n  ✓ Oracle (Senior) conectado: {config['connection_string'].split('@')[-1]}")
+    print(f"\n  OK Oracle (Senior) conectado: {config['connection_string'].split('@')[-1]}")
 
 
 @pytest.mark.homolog
@@ -88,4 +88,4 @@ def test_procfit_tabelas_existem(require_procfit: None) -> None:
         for tabela in tabelas:
             result = conn.execute(text(f"SELECT TOP 1 1 AS ok FROM {tabela} WITH(NOLOCK)")).fetchone()
             assert result is not None, f"Tabela {tabela} inacessível ou vazia"
-            print(f"\n  ✓ {tabela} acessível")
+            print(f"\n  OK {tabela} acessível")

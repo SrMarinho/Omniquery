@@ -30,13 +30,8 @@ from rich.table import Table
 console = Console()
 
 # ---------------------------------------------------------------------------
-# CLI options
+# CLI options (--rows e --repeat já registrados em tests/conftest.py)
 # ---------------------------------------------------------------------------
-
-
-def pytest_addoption(parser: pytest.Parser) -> None:
-    parser.addoption("--rows", type=int, default=100_000, help="Linhas sintéticas para benchmarks de output")
-    parser.addoption("--repeat", type=int, default=3, help="Repetições por benchmark")
 
 
 @pytest.fixture(scope="module")

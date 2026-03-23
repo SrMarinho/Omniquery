@@ -120,7 +120,7 @@ def test_oracle_sim_join_divergencia_saidas() -> None:
     result = target_con.execute(divergencia_saidas_query).fetchall()
     # Não importa quantas divergências — importa que a query executou sem erro
     assert isinstance(result, list)
-    print(f"\n  ✓ divergencia_saidas: {len(result)} divergências encontradas na simulação")
+    print(f"\n  OK divergencia_saidas: {len(result)} divergencias encontradas na simulacao")
 
 
 def test_oracle_sim_join_divergencia_entradas() -> None:
@@ -177,7 +177,7 @@ def test_oracle_sim_join_divergencia_entradas() -> None:
 
     result = target_con.execute(divergencia_entradas_query).fetchall()
     assert isinstance(result, list)
-    print(f"\n  ✓ divergencia_entradas: {len(result)} divergências encontradas na simulação")
+    print(f"\n  OK divergencia_entradas: {len(result)} divergencias encontradas na simulacao")
 
 
 def test_oracle_sim_performance() -> None:
