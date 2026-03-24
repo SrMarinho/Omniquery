@@ -60,7 +60,7 @@ Preencha as credenciais dos bancos e ajuste os parâmetros de tuning conforme ne
 | `PG_MAINTENANCE_WORK_MEM` | `1GB` | `maintenance_work_mem` por sessão no PostgreSQL |
 | `ORACLE_ODBC_DRIVER` | `Oracle` | Nome do driver ODBC instalado para Oracle |
 
-### 2. Conexões de banco (`databases.yaml`)
+### 2. Conexões de banco (`databases.yml`)
 
 Define as connection strings. As variáveis entre `{{ }}` são substituídas pelo `.env`:
 
@@ -82,16 +82,16 @@ senior:
 uv run main.py list
 
 # Executar um pipeline
-uv run main.py pipelines/meu_pipeline.yaml
+uv run main.py pipelines/meu_pipeline.yml
 
 # Executar com parâmetros dinâmicos
-uv run main.py pipelines/relatorio.yaml --data_inicio 2024-01-01 --data_fim 2024-12-31
+uv run main.py pipelines/relatorio.yml --data_inicio 2024-01-01 --data_fim 2024-12-31
 
 # Ver os parâmetros aceitos por um pipeline
-uv run main.py pipelines/relatorio.yaml --help
+uv run main.py pipelines/relatorio.yml --help
 
 # Validar o pipeline sem executar (dry-run)
-uv run main.py pipelines/relatorio.yaml --dry-run
+uv run main.py pipelines/relatorio.yml --dry-run
 ```
 
 ## Escrevendo pipelines
@@ -119,7 +119,7 @@ parameters:
 # Fontes de dados — cada tabela vira uma view no DuckDB
 loads:
   - type: database
-    source: procfit         # Nome definido em databases.yaml
+    source: procfit         # Nome definido em databases.yml
     tables:
       - alias: vendas       # Como a tabela será chamada no DuckDB
         type: inline        # "inline" (SQL direto) ou "sql" (arquivo .sql)
@@ -162,7 +162,7 @@ outputs:
 Parâmetros declarados em `parameters:` viram flags na CLI (`--nome_param`) e são substituídos no YAML via `{{ nome_param }}` antes da execução.
 
 ```bash
-uv run main.py pipelines/relatorio.yaml --data_inicio 2024-01-01 --data_fim 2024-12-31
+uv run main.py pipelines/relatorio.yml --data_inicio 2024-01-01 --data_fim 2024-12-31
 ```
 
 ### SQL em arquivo separado
@@ -235,9 +235,9 @@ omniquery/
 │   │   ├── parameter.py         # Modelo de parâmetro
 │   │   └── table.py             # Modelo de tabela
 │   └── utils/
-│       ├── database_config_reader.py  # Leitor de databases.yaml
+│       ├── database_config_reader.py  # Leitor de databases.yml
 │       └── retry.py                   # Retry com backoff exponencial
-├── databases.yaml               # Configuração de conexões
+├── databases.yml                # Configuração de conexões
 ├── main.py                      # Entrypoint
 └── pyproject.toml
 ```

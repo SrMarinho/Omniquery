@@ -40,7 +40,7 @@ def get_pipelines() -> list[str]:
     pipelines_dir = os.path.join(base_path, "pipelines")
     if not os.path.exists(pipelines_dir):
         return []
-    return [f for f in os.listdir(pipelines_dir) if f.endswith(".yaml")]
+    return [f for f in os.listdir(pipelines_dir) if f.endswith(".yaml") or f.endswith(".yml")]
 
 
 def print_available_pipelines() -> None:

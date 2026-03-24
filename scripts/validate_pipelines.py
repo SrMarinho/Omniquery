@@ -16,7 +16,7 @@ def main() -> int:
     schema = json.loads(SCHEMA_FILE.read_text(encoding="utf-8"))
     validator = jsonschema.Draft7Validator(schema)
 
-    pipelines = sorted(PIPELINES_DIR.glob("*.yaml"))
+    pipelines = sorted([*PIPELINES_DIR.glob("*.yaml"), *PIPELINES_DIR.glob("*.yml")])
     if not pipelines:
         print("Nenhum pipeline encontrado em pipelines/")
         return 0

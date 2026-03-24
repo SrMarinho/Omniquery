@@ -14,10 +14,13 @@ def get_database_config(database: str) -> dict:  # type: ignore[type-arg]
     """
     Get database configuration from 'databases.yaml' in root path
     """
-    database_file = "databases.yaml"
-    config_file = base_path / database_file
-    if not config_file.exists():
-        raise FileNotFoundError(f"File {database_file} not found in root path")
+    config_file = next(
+        (base_path / f for f in ("databases.yaml", "databases.yml") if (base_path / f).exists()),
+        None,
+    )
+    if config_file is None:
+        raise FileNotFoundError("File databases.yaml (or databases.yml) not found in root path")
+    database_file = config_file.name
     with open(config_file, encoding="utf-8") as file:
         data = yaml.safe_load(file)  # type: ignore[no-any-return]
         if database not in data:
