@@ -305,7 +305,6 @@ Os testes pulam automaticamente quando as credenciais do banco correspondente es
 | Workflow | Trigger | O que faz |
 |---|---|---|
 | **CI** | push / PR | Lint (Ruff), Mypy, testes unitários, validação de YAMLs |
-| **Homolog Tests** | `workflow_dispatch` | Testes E2E com PostgreSQL local + bancos externos via secrets |
 
 ## Tecnologias
 
