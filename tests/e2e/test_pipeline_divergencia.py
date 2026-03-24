@@ -83,7 +83,7 @@ def test_e2e_divergencia_oracle_simulado(
     t0 = time.perf_counter()
 
     App(
-        pipeline="pipelines/divergencia_pbs_snr.yaml",
+        pipeline="pipelines/divergencia_pbs_snr.yml",
         pipeline_params=pipeline_date_params,
     ).run()
 
@@ -138,7 +138,7 @@ def test_e2e_divergencia_oracle_real(
     t0 = time.perf_counter()
 
     App(
-        pipeline="pipelines/divergencia_pbs_snr.yaml",
+        pipeline="pipelines/divergencia_pbs_snr.yml",
         pipeline_params=pipeline_date_params,
     ).run()
 
@@ -210,7 +210,7 @@ def test_divergencia_sim_vs_real_row_count(
 
     # Run real
     fresh_db()
-    App(pipeline="pipelines/divergencia_pbs_snr.yaml", pipeline_params=pipeline_date_params).run()
+    App(pipeline="pipelines/divergencia_pbs_snr.yml", pipeline_params=pipeline_date_params).run()
     counts_real = _contar_saidas_postgres(["divergencia_saidas", "divergencia_entradas"])
 
     # Run simulado
@@ -226,7 +226,7 @@ def test_divergencia_sim_vs_real_row_count(
         return original_run(self)  # type: ignore[return-value]
 
     monkeypatch.setattr(DatabaseLoader, "run", patched_run)
-    App(pipeline="pipelines/divergencia_pbs_snr.yaml", pipeline_params=pipeline_date_params).run()
+    App(pipeline="pipelines/divergencia_pbs_snr.yml", pipeline_params=pipeline_date_params).run()
     counts_sim = _contar_saidas_postgres(["divergencia_saidas", "divergencia_entradas"])
 
     print(
