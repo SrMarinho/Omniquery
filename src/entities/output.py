@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import pyarrow as pa
 import pyarrow.csv as pa_csv
 from duckdb import DuckDBPyConnection
 from pydantic import BaseModel, Field
@@ -52,6 +53,23 @@ _DUCKDB_TO_PG: dict[str, str] = {
     "JSON": "JSONB",
     "INTERVAL": "INTERVAL",
 }
+
+
+def _cast_binary_to_hex(table: pa.Table) -> pa.Table:
+    """Converte colunas binárias para hex string no formato aceito pelo PostgreSQL bytea (\\xHEX)."""
+    new_columns: list[pa.ChunkedArray | pa.Array] = []
+    changed = False
+    for i, field in enumerate(table.schema):
+        col = table.column(i)
+        if pa.types.is_binary(field.type) or pa.types.is_large_binary(field.type):
+            hex_values = ["\\x" + v.hex() if v is not None else None for v in col.to_pylist()]
+            new_columns.append(pa.array(hex_values, type=pa.string()))
+            changed = True
+        else:
+            new_columns.append(col)
+    if not changed:
+        return table
+    return pa.table({field.name: col for field, col in zip(table.schema, new_columns)})
 
 
 def _duckdb_type_to_pg(duckdb_type: str) -> str:
@@ -106,10 +124,19 @@ class DatabaseOutput(Output):
             with memory_database_lock:
                 arrow_table = source_database.execute(query).fetch_arrow_table()
 
+            arrow_table = _cast_binary_to_hex(arrow_table)
+
             data_bytes = arrow_table.nbytes
             buf = io.BytesIO()
             write_opts = pa_csv.WriteOptions(include_header=False)
-            pa_csv.write_csv(arrow_table, buf, write_options=write_opts)
+            try:
+                pa_csv.write_csv(arrow_table, buf, write_options=write_opts)
+            except pa.lib.ArrowInvalid:
+                # Fallback para dados com strings inválidas em UTF-8 (ex: NVARCHAR do SQL Server)
+                logger.debug("pa_csv.write_csv falhou com ArrowInvalid — usando fallback pandas")
+                buf = io.BytesIO()
+                csv_str = arrow_table.to_pandas().to_csv(index=False, header=False)
+                buf.write(csv_str.encode("utf-8", errors="replace"))
             buf.seek(0)
 
             cur.copy_expert(  # type: ignore[attr-defined]

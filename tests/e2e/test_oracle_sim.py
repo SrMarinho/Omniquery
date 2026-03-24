@@ -13,8 +13,8 @@ import time
 
 import duckdb
 
-from tests.homolog.conftest import ResourceMonitor, print_homolog_results
-from tests.homolog.oracle_sim.schema import build_oracle_sim, register_oracle_sim_tables
+from tests.e2e.conftest import ResourceMonitor, print_homolog_results
+from tests.e2e.oracle_sim.schema import build_oracle_sim, register_oracle_sim_tables
 
 
 def test_oracle_sim_cria_tabelas() -> None:

@@ -5,7 +5,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
-import connectorx as cx
 import pandas as pd
 import pyarrow as pa
 from duckdb import DuckDBPyConnection
@@ -174,6 +173,8 @@ class DatabaseLoader(Loader):
 
     def _transfer_via_arrow(self, cx_url: str, to_engine: DuckDBPyConnection, table: Table) -> int:
         """Le via connectorx -> Arrow -> DuckDB. Remove timezone de colunas timestamp para evitar dependencia de ICU tzdata."""
+        import connectorx as cx
+
         arrow_table: pa.Table = cx.read_sql(cx_url, table.content, return_type="arrow")  # type: ignore[assignment]
         arrow_table = arrow_table.rename_columns([c.lower() for c in arrow_table.column_names])
 

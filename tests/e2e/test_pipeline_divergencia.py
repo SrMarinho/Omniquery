@@ -24,8 +24,8 @@ from sqlalchemy import create_engine, text
 from src.app import App
 from src.entities.loader import DatabaseLoader
 from src.utils.database_config_reader import get_database_config
-from tests.homolog.conftest import ResourceMonitor, print_homolog_results
-from tests.homolog.oracle_sim.schema import build_oracle_sim, register_oracle_sim_tables
+from tests.e2e.conftest import ResourceMonitor, print_homolog_results
+from tests.e2e.oracle_sim.schema import build_oracle_sim, register_oracle_sim_tables
 
 
 def _contar_saidas_postgres(tabelas: list[str]) -> dict[str, int]:

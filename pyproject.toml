@@ -43,7 +43,9 @@ dev = [
 markers = [
     "homolog: testes E2E com banco real (requer credenciais de homolog)",
 ]
-addopts = "--ignore=tests/homolog"
+addopts = "--ignore=tests/e2e --import-mode=importlib"
+testpaths = ["tests/unit"]
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 120

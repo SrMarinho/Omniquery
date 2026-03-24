@@ -15,7 +15,7 @@ import pytest
 
 from src.entities.loader import DatabaseLoader
 from src.entities.table import Table
-from tests.homolog.conftest import ResourceMonitor, print_homolog_results
+from tests.e2e.conftest import ResourceMonitor, print_homolog_results
 
 
 @pytest.mark.homolog
