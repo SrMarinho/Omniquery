@@ -208,11 +208,19 @@ omniquery/
 ├── scripts/
 │   └── validate_pipelines.py    # Valida todos os pipelines contra o schema
 ├── tests/
-│   ├── conftest.py              # Fixtures e opções CLI de benchmark
-│   ├── bench_transfer.py        # Benchmarks de performance (--rows, --repeat)
-│   ├── test_app.py
-│   ├── test_entities.py
-│   └── test_utils.py
+│   ├── conftest.py              # Fixtures compartilhadas (minimal_pipeline_file)
+│   ├── unit/                    # Testes unitários — sem banco externo
+│   │   ├── test_app.py          # Testes de App._substitute_parameters
+│   │   ├── test_entities.py     # Testes de entidades (Loader, Output, Pipeline, etc.)
+│   │   └── test_utils.py        # Testes de utilitários
+│   └── e2e/                     # Testes E2E com banco real (requer credenciais)
+│       ├── conftest.py          # Fixtures, ResourceMonitor e utilitários E2E
+│       ├── oracle_sim/          # Simulação de Oracle para testes sem banco real
+│       ├── test_connections.py  # Conectividade com Procfit, PostgreSQL e Oracle
+│       ├── test_loader_mssql.py # Loader SQL Server com dados reais
+│       ├── test_oracle_sim.py   # Pipeline com Oracle simulado
+│       ├── test_output_postgres.py      # Output PostgreSQL (sintético e real)
+│       └── test_pipeline_divergencia.py # E2E pipeline de divergência PBS × Senior
 ├── src/
 │   ├── app.py                   # Orquestrador principal
 │   ├── exceptions.py            # Hierarquia de exceções
@@ -240,12 +248,11 @@ omniquery/
 # Instalar dependências de desenvolvimento
 uv sync --group dev
 
-# Rodar testes
-uv run pytest tests/ -v
+# Rodar testes unitários
+uv run pytest tests/unit/ -v
 
-# Rodar benchmarks de performance
-uv run pytest tests/bench_transfer.py -s -v
-uv run pytest tests/bench_transfer.py -s -v --rows=1000000 --repeat=5
+# Rodar testes E2E (requer credenciais no .env)
+uv run pytest tests/e2e/ -v -s -m homolog
 
 # Validar pipelines localmente
 uv run python scripts/validate_pipelines.py
@@ -264,13 +271,41 @@ uv run pre-commit install
 
 Hooks: Ruff (lint + format), Mypy, trailing whitespace, end-of-file.
 
+## Testes E2E
+
+Os testes em `tests/e2e/` validam o pipeline contra bancos reais. São isolados do CI padrão e precisam de credenciais configuradas no `.env`.
+
+```bash
+# Rodar toda a suíte E2E
+uv run pytest tests/e2e/ -v -s -m homolog
+
+# Apenas os testes sem banco externo (Oracle simulado)
+uv run pytest tests/e2e/ -v -s -k "not postgres and not mssql"
+```
+
+Os testes pulam automaticamente quando as credenciais do banco correspondente estão ausentes.
+
+| Arquivo | Requer |
+|---|---|
+| `test_connections.py` | Procfit / PostgreSQL / Oracle |
+| `test_loader_mssql.py` | Procfit (SQL Server) |
+| `test_output_postgres.py` | PostgreSQL |
+| `test_oracle_sim.py` | Nenhum (Oracle simulado via DuckDB) |
+| `test_pipeline_divergencia.py` | Procfit + PostgreSQL (Oracle simulado ou real) |
+
+### Flags úteis
+
+| Flag | Padrão | Descrição |
+|---|---|---|
+| `--rows=N` | `500000` | Linhas sintéticas nos benchmarks de output |
+| `--repeat=N` | `3` | Repetições por benchmark |
+
 ## CI/CD
 
-| Job | O que faz |
-|---|---|
-| **Lint & Type Check** | Ruff + Mypy |
-| **Tests** | pytest com testes unitários |
-| **Validate Pipeline YAMLs** | Valida todos os arquivos de `pipelines/` contra o JSON Schema |
+| Workflow | Trigger | O que faz |
+|---|---|---|
+| **CI** | push / PR | Lint (Ruff), Mypy, testes unitários, validação de YAMLs |
+| **Homolog Tests** | `workflow_dispatch` | Testes E2E com PostgreSQL local + bancos externos via secrets |
 
 ## Tecnologias
 

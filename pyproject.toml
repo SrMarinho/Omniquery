@@ -34,9 +34,18 @@ dev = [
     "jsonschema>=4.26.0",
     "mypy>=1.14.0",
     "pre-commit>=4.0.0",
+    "psutil>=6.0.0",
     "pytest>=8.0.0",
     "ruff>=0.9.0",
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "homolog: testes E2E com banco real (requer credenciais de homolog)",
+]
+addopts = "--ignore=tests/e2e --import-mode=importlib"
+testpaths = ["tests/unit"]
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 120
