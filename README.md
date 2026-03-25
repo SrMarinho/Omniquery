@@ -26,6 +26,27 @@ flowchart TD
     OUTPUTS --> FILE_OUT["CSV / XLSX\nDuckDB COPY TO"]
 ```
 
+### Permissões de banco de dados
+
+**Bancos de origem** (SQL Server, PostgreSQL, Oracle) — usuário precisa apenas de:
+
+| Banco | Permissão |
+|---|---|
+| SQL Server | `SELECT` nas tabelas consultadas |
+| PostgreSQL | `SELECT` nas tabelas consultadas |
+| Oracle | `SELECT` nas tabelas consultadas |
+
+**Banco de destino** (PostgreSQL) — usuário precisa de:
+
+| Permissão | Quando |
+|---|---|
+| `CREATE` | Sempre — cria a tabela de destino |
+| `DROP` | Apenas com `if_exists: replace` (padrão) |
+| `INSERT` | Sempre — carga via `COPY FROM STDIN` |
+| `SELECT` | Sempre — verificação de contagem pós-carga |
+
+> `UPDATE`, `DELETE`, `ALTER` e `TRUNCATE` **não são necessárias** — o OmniQuery recria a tabela do zero no modo padrão (`replace`).
+
 Cada pipeline YAML define:
 1. **Loaders** — de onde buscar os dados e como nomeá-los no DuckDB
 2. **Outputs** — queries SQL sobre as tabelas carregadas e para onde enviar o resultado
