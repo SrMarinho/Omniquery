@@ -6,16 +6,24 @@ Ferramenta de ETL via YAML para consulta e processamento de dados entre múltipl
 
 ## Como funciona
 
-```
-┌──────────────┐      ┌──────────────┐      ┌──────────────┐
-│   Loaders    │ ──►  │    DuckDB    │ ──►  │   Outputs    │
-│              │      │  (memória)   │      │              │
-├──────────────┤      └──────────────┘      ├──────────────┤
-│ PostgreSQL   │       SQL puro entre        │ PostgreSQL   │
-│ SQL Server   │       qualquer tabela       │ CSV / XLSX   │
-│ Oracle       │       carregada             │              │
-│ CSV / XLSX   │                             │              │
-└──────────────┘                             └──────────────┘
+```mermaid
+flowchart TD
+    CLI["CLI\nmain.py pipeline.yml --params"] --> APP["App\nCarrega e valida o pipeline YAML"]
+    APP --> LOADERS["Loaders — executados em paralelo"]
+
+    LOADERS --> MSSQL["SQL Server\nconnectorx + Arrow"]
+    LOADERS --> ORA["Oracle\nturbodbc / pandas + Arrow"]
+    LOADERS --> PG_SRC["PostgreSQL\nconnectorx + Arrow"]
+    LOADERS --> FILE_IN["CSV / XLSX\npandas"]
+
+    MSSQL --> DUCK[("DuckDB\nin-memory")]
+    ORA --> DUCK
+    PG_SRC --> DUCK
+    FILE_IN --> DUCK
+
+    DUCK --> OUTPUTS["Outputs"]
+    OUTPUTS --> PG_DST["PostgreSQL (destino)\nArrow → COPY FROM STDIN"]
+    OUTPUTS --> FILE_OUT["CSV / XLSX\nDuckDB COPY TO"]
 ```
 
 Cada pipeline YAML define:
