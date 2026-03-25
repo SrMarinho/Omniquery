@@ -196,7 +196,7 @@ def test_oracle_sim_performance() -> None:
         duration = time.perf_counter() - t0
         monitor.stop()
 
-        arrow_mb = sim_con.execute("SELECT * FROM E140NFV").fetch_arrow_table().nbytes / (1024 * 1024)
+        arrow_mb = sim_con.execute("SELECT * FROM E140NFV").to_arrow_table().nbytes / (1024 * 1024)
         mb_s = (arrow_mb * 2) / duration if duration > 0 else 0.0
 
         results.append(

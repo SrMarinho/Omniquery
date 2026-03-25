@@ -122,7 +122,7 @@ class DatabaseOutput(Output):
             transfer_start = time.time()
 
             with memory_database_lock:
-                arrow_table = source_database.execute(query).fetch_arrow_table()
+                arrow_table = source_database.execute(query).to_arrow_table()
 
             arrow_table = _cast_binary_to_hex(arrow_table)
 

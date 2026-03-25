@@ -45,7 +45,7 @@ def test_loader_nf_faturamento(require_procfit: None, fresh_memory_database: obj
     import src.config as cfg
 
     total_rows = cfg.memory_database.execute("SELECT COUNT(*) FROM nf_faturamento_sample").fetchone()[0]  # type: ignore[index]
-    data_bytes = cfg.memory_database.execute("SELECT * FROM nf_faturamento_sample").fetch_arrow_table().nbytes
+    data_bytes = cfg.memory_database.execute("SELECT * FROM nf_faturamento_sample").to_arrow_table().nbytes
     data_mb = data_bytes / (1024 * 1024)
     mb_s = data_mb / duration if duration > 0 else 0.0
 
@@ -93,7 +93,7 @@ def test_loader_nf_compra(require_procfit: None, fresh_memory_database: object) 
     import src.config as cfg
 
     total_rows = cfg.memory_database.execute("SELECT COUNT(*) FROM nf_compra_sample").fetchone()[0]  # type: ignore[index]
-    data_bytes = cfg.memory_database.execute("SELECT * FROM nf_compra_sample").fetch_arrow_table().nbytes
+    data_bytes = cfg.memory_database.execute("SELECT * FROM nf_compra_sample").to_arrow_table().nbytes
     data_mb = data_bytes / (1024 * 1024)
     mb_s = data_mb / duration if duration > 0 else 0.0
 

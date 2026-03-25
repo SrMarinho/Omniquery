@@ -67,7 +67,7 @@ def register_oracle_sim_tables(sim_con: duckdb.DuckDBPyConnection, target_con: d
     ]
 
     for alias, table_name in mappings:
-        arrow_table = sim_con.execute(f"SELECT * FROM {table_name}").fetch_arrow_table()
+        arrow_table = sim_con.execute(f"SELECT * FROM {table_name}").to_arrow_table()
         target_con.register("_oracle_sim_tmp", arrow_table)
         target_con.execute(f"CREATE OR REPLACE TABLE {alias} AS SELECT * FROM _oracle_sim_tmp")
         target_con.unregister("_oracle_sim_tmp")

@@ -46,7 +46,7 @@ def test_output_postgres_sintetico(
         output.run()
         durations.append(time.perf_counter() - t0)
 
-    data_mb = cfg.memory_database.execute("SELECT * FROM synth_output").fetch_arrow_table().nbytes / (1024 * 1024)
+    data_mb = cfg.memory_database.execute("SELECT * FROM synth_output").to_arrow_table().nbytes / (1024 * 1024)
     avg = sum(durations) / len(durations)
     mb_s = data_mb / avg if avg > 0 else 0.0
 
