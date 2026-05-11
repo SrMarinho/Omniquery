@@ -1,12 +1,12 @@
 """
-Teste de carga isolado: SQL Server (Procfit) → DuckDB.
+Isolated load test: SQL Server (Procfit) → DuckDB.
 
-Mede exclusivamente o caminho DatabaseLoader._transfer_via_arrow() (connectorx)
-sem depender do PostgreSQL de destino. Útil para diagnosticar gargalos na
-extração dos dados de origem antes de qualquer transformação.
+Exercises only the DatabaseLoader._transfer_via_arrow() path (connectorx)
+without depending on the PostgreSQL destination. Useful to diagnose
+source-side extraction bottlenecks before any transformation.
 
-Execução:
-    uv run pytest tests/homolog/test_loader_mssql.py -v -s -m homolog
+Run:
+    uv run pytest tests/e2e/test_loader_mssql.py -v -s -m homolog
 """
 
 import time
@@ -21,8 +21,8 @@ from tests.e2e.conftest import ResourceMonitor, print_homolog_results
 @pytest.mark.homolog
 def test_loader_nf_faturamento(require_procfit: None, fresh_memory_database: object) -> None:
     """
-    Carrega amostra de NF_FATURAMENTO do SQL Server no DuckDB.
-    Mede: duração, linhas transferidas, MB/s, RAM pico, CPU médio, rede recebida.
+    Load a sample of NF_FATURAMENTO from SQL Server into DuckDB.
+    Measures: duration, rows transferred, MB/s, RAM peak, avg CPU, network received.
     """
     loader = DatabaseLoader(
         type="database",
@@ -49,7 +49,7 @@ def test_loader_nf_faturamento(require_procfit: None, fresh_memory_database: obj
     data_mb = data_bytes / (1024 * 1024)
     mb_s = data_mb / duration if duration > 0 else 0.0
 
-    assert total_rows == 10000, f"Esperado 10000 linhas, obtido {total_rows}"
+    assert total_rows == 10000, f"Expected 10000 rows, got {total_rows}"
 
     print_homolog_results(
         "SQL Server → DuckDB | NF_FATURAMENTO (TOP 10k)",
@@ -71,7 +71,7 @@ def test_loader_nf_faturamento(require_procfit: None, fresh_memory_database: obj
 
 @pytest.mark.homolog
 def test_loader_nf_compra(require_procfit: None, fresh_memory_database: object) -> None:
-    """Carrega amostra de NF_COMPRA do SQL Server no DuckDB."""
+    """Load a sample of NF_COMPRA from SQL Server into DuckDB."""
     loader = DatabaseLoader(
         type="database",
         source="procfit",
@@ -118,10 +118,10 @@ def test_loader_nf_compra(require_procfit: None, fresh_memory_database: object) 
 
 
 @pytest.mark.homolog
-def test_loader_multiplas_tabelas_paralelo(require_procfit: None, fresh_memory_database: object) -> None:
+def test_loader_multiple_tables_parallel(require_procfit: None, fresh_memory_database: object) -> None:
     """
-    Carrega múltiplas tabelas em paralelo (ThreadPoolExecutor interno do DatabaseLoader).
-    Mede o tempo total e o overhead do paralelismo.
+    Load multiple tables in parallel (DatabaseLoader's internal ThreadPoolExecutor).
+    Measures total time and the overhead of parallelism.
     """
     loader = DatabaseLoader(
         type="database",
@@ -148,7 +148,7 @@ def test_loader_multiplas_tabelas_paralelo(require_procfit: None, fresh_memory_d
     assert rows_cmp == 5000
 
     print_homolog_results(
-        "SQL Server → DuckDB | 2 tabelas em paralelo (5k + 5k)",
+        "SQL Server → DuckDB | 2 tables in parallel (5k + 5k)",
         [
             (
                 "nf_fat + nf_cmp (ThreadPoolExecutor)",

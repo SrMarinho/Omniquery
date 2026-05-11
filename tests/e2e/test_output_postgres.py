@@ -1,4 +1,4 @@
-"""Testes de output DuckDB → PostgreSQL."""
+"""Output tests: DuckDB → PostgreSQL."""
 
 import time
 
@@ -11,13 +11,13 @@ from tests.e2e.conftest import print_homolog_results
 
 
 @pytest.mark.homolog
-def test_output_postgres_sintetico(
+def test_output_postgres_synthetic(
     require_postgresql: None,
     fresh_memory_database: object,
     rows: int,
     repeat: int,
 ) -> None:
-    """Transfere N linhas sintéticas do DuckDB para o PostgreSQL via COPY FROM STDIN."""
+    """Transfer N synthetic rows from DuckDB to PostgreSQL via COPY FROM STDIN."""
     import src.config as cfg
 
     cfg.memory_database.execute(f"""
@@ -51,7 +51,7 @@ def test_output_postgres_sintetico(
     mb_s = data_mb / avg if avg > 0 else 0.0
 
     print_homolog_results(
-        f"DuckDB → PostgreSQL — {rows:,} rows × {repeat} repetições",
+        f"DuckDB → PostgreSQL — {rows:,} rows × {repeat} repetitions",
         [
             (
                 f"DuckDB → PostgreSQL COPY FROM STDIN ({rows:,} rows)",
@@ -71,18 +71,18 @@ def test_output_postgres_sintetico(
 
 
 @pytest.mark.homolog
-def test_output_postgres_tipos_variados(
+def test_output_postgres_mixed_types(
     require_postgresql: None,
     fresh_memory_database: object,
 ) -> None:
-    """Verifica que o mapeamento de tipos DuckDB → PostgreSQL funciona corretamente."""
+    """Verify the DuckDB → PostgreSQL type mapping works correctly."""
     from sqlalchemy import create_engine, text
 
     import src.config as cfg
     from src.utils.database_config_reader import get_database_config
 
     cfg.memory_database.execute("""
-        CREATE OR REPLACE TABLE tipos_test AS SELECT
+        CREATE OR REPLACE TABLE types_test AS SELECT
             42::INTEGER                AS col_int,
             9999999999::BIGINT         AS col_bigint,
             3.14::DOUBLE               AS col_double,
@@ -95,15 +95,15 @@ def test_output_postgres_tipos_variados(
 
     output = DatabaseOutput(
         type="database",
-        name="omniquery_homolog_tipos",
-        query="SELECT * FROM tipos_test",
+        name="omniquery_homolog_types",
+        query="SELECT * FROM types_test",
     )
     output.run()
 
     config = get_database_config("postgresql")
     engine = create_engine(config["connection_string"])
     with engine.connect() as conn:
-        row = conn.execute(text("SELECT * FROM omniquery_homolog_tipos")).fetchone()
+        row = conn.execute(text("SELECT * FROM omniquery_homolog_types")).fetchone()
 
     assert row is not None
     assert row[0] == 42
@@ -116,7 +116,7 @@ def test_output_postgres_real_nf_faturamento(
     require_postgresql: None,
     fresh_memory_database: object,
 ) -> None:
-    """Fluxo real: SQL Server (NF_FATURAMENTO 1k rows) → DuckDB → PostgreSQL."""
+    """Real flow: SQL Server (NF_FATURAMENTO 1k rows) → DuckDB → PostgreSQL."""
     import src.config as cfg
 
     n = 1_000
@@ -142,12 +142,12 @@ def test_output_postgres_real_nf_faturamento(
 
 
 @pytest.mark.homolog
-def test_output_postgres_real_vs_sintetico(
+def test_output_postgres_real_vs_synthetic(
     require_procfit: None,
     require_postgresql: None,
     fresh_memory_database: object,
 ) -> None:
-    """Compara output real vs sintético (10k rows) para o mesmo volume."""
+    """Compare real vs synthetic output (10k rows) at matching volume."""
     import src.config as cfg
 
     n = 10_000
@@ -169,7 +169,7 @@ def test_output_postgres_real_vs_sintetico(
     ).run()
     out_dur_real = time.perf_counter() - t0
 
-    # sintético
+    # synthetic
     cfg.memory_database.execute(f"""
         CREATE OR REPLACE TABLE synth_cmp AS
         SELECT
@@ -186,7 +186,7 @@ def test_output_postgres_real_vs_sintetico(
     t0 = time.perf_counter()
     DatabaseOutput(
         type="database",
-        name="homolog_cmp_sintetico",
+        name="homolog_cmp_synthetic",
         query="SELECT * FROM synth_cmp",
         options={"if_exists": "replace"},
     ).run()

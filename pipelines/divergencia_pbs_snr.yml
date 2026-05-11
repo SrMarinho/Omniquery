@@ -1,20 +1,20 @@
 name: divergencia_pbs_snr
-description: Pipeline para processar divergências de entre PBS e Senior
+description: Pipeline that processes divergences between PBS and Senior
 parameters:
   - name: data_inicio
     type: date
     required: true
-    description: Data de início para filtragem dos dados (formato YYYY-MM-DD)
+    description: Start date for filtering (YYYY-MM-DD)
   - name: data_fim
     type: date
-    description: Data de fim para filtragem dos dados (formato YYYY-MM-DD)
+    description: End date for filtering (YYYY-MM-DD)
     required: true
 loads:
   - type: database
     source: procfit
     tables:
       - alias: nf_faturamento
-        description: Consulta de faturamento do PBS
+        description: PBS invoicing query
         type: inline
         content: |
           SELECT A.EMPRESA        AS unidade,
@@ -43,7 +43,7 @@ loads:
         options:
           if_exists: replace
       - alias: nf_faturamento_devolucoes
-        description: Consulta de devoluções de faturamento do PBS
+        description: PBS invoicing returns query
         type: inline
         content: |
           SELECT A.EMPRESA        AS unidade,
@@ -68,7 +68,7 @@ loads:
         options:
           if_exists: replace
       - alias: nf_compras
-        description: Consulta de compras do PBS
+        description: PBS purchases query
         type: inline
         content: |
           SELECT A.EMPRESA        AS unidade,
@@ -92,7 +92,7 @@ loads:
         options:
           if_exists: replace
       - alias: nf_compras_devolucoes
-        description: Consulta de devoluções de compras do PBS
+        description: PBS purchase returns query
         type: inline
         content: |
           SELECT A.EMPRESA        AS unidade,
@@ -124,7 +124,7 @@ loads:
     source: senior
     tables:
       - alias: vendas_senior
-        description: Consulta de vendas da Senior
+        description: Senior sales query
         type: inline
         content: |
           SELECT CODEMP,
@@ -141,7 +141,7 @@ loads:
             AND DATEMI >= TO_DATE('{{ data_inicio }}', 'YYYY-MM-DD')
             AND DATEMI < TO_DATE('{{ data_fim }}', 'YYYY-MM-DD')
       - alias: compras_senior
-        description: Consulta de compras da Senior
+        description: Senior purchases query
         type: inline
         content: |
           SELECT CODEMP,

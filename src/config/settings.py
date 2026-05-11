@@ -17,9 +17,9 @@ DB_BATCH_SIZE: int = int(os.getenv("DB_BATCH_SIZE", "500000"))
 # Pipeline parallelism
 PIPELINE_WORKERS: int = int(os.getenv("PIPELINE_WORKERS", "4"))
 
-# Oracle ODBC (turbodbc) — nome do driver instalado no sistema
+# Oracle ODBC (turbodbc) — name of the ODBC driver installed on the system.
 ORACLE_ODBC_DRIVER: str = os.getenv("ORACLE_ODBC_DRIVER", "Oracle")
 
-# PostgreSQL session tuning para bulk import
+# PostgreSQL session tuning for bulk import.
 PG_WORK_MEM: str = os.getenv("PG_WORK_MEM", "256MB")
 PG_MAINTENANCE_WORK_MEM: str = os.getenv("PG_MAINTENANCE_WORK_MEM", "1GB")

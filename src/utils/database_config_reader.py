@@ -32,9 +32,7 @@ def get_database_config(database: str) -> dict:  # type: ignore[type-arg]
 
 
 def substitute_env_variables(connection_string: str) -> str:
-    """
-    Substitui variáveis entre {{ }} pelos valores correspondentes do ambiente
-    """
+    """Substitute {{ VAR }} placeholders with the corresponding environment variable values."""
 
     def replace_match(match: re.Match) -> str:  # type: ignore[type-arg]
         env_var = match.group(1)

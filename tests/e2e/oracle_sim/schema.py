@@ -1,13 +1,13 @@
 """
-Simulação do banco Oracle Senior em DuckDB.
+DuckDB-backed simulation of the Senior Oracle database.
 
-Cria as tabelas E140NFV (vendas) e E440NFC (compras) com o schema exato
-usado pelo pipeline divergencia_pbs_snr.yaml, populadas com dados sintéticos.
+Builds tables E140NFV (sales) and E440NFC (purchases) using the exact schema
+consumed by the divergencia_pbs_snr pipeline, populated with synthetic data.
 
-Isso permite testar o pipeline completo sem precisar de uma conexão Oracle real,
-substituindo o loader 'senior' por tabelas pré-carregadas no DuckDB.
+This lets the full pipeline run without a real Oracle connection — the
+'senior' loader is replaced with pre-loaded DuckDB tables.
 
-Schema derivado de pipelines/divergencia_pbs_snr.yaml:
+Schema derived from pipelines/divergencia_pbs_snr.yml:
     E140NFV: CODEMP, CODFIL, DATEMI, NUMNFV, VLRBPR, DATGER, VLRLIQ
     E440NFC: CODEMP, CODFIL, DATENT, NUMNFC, VLRBPR, DATGER, VLRLIQ
 """
@@ -17,10 +17,10 @@ import duckdb
 
 def build_oracle_sim(n_rows: int = 50_000) -> duckdb.DuckDBPyConnection:
     """
-    Retorna uma conexão DuckDB isolada com E140NFV e E440NFC populadas.
+    Return an isolated DuckDB connection with E140NFV and E440NFC populated.
 
     Args:
-        n_rows: número de linhas a gerar em cada tabela.
+        n_rows: number of rows to generate in each table.
     """
     con = duckdb.connect(":memory:")
 
@@ -55,11 +55,11 @@ def build_oracle_sim(n_rows: int = 50_000) -> duckdb.DuckDBPyConnection:
 
 def register_oracle_sim_tables(sim_con: duckdb.DuckDBPyConnection, target_con: duckdb.DuckDBPyConnection) -> None:
     """
-    Registra as tabelas do Oracle simulado no memory_database como
-    'vendas_senior' e 'compras_senior' — os aliases esperados pelo pipeline.
+    Register the simulated Oracle tables in `target_con` as
+    'vendas_senior' and 'compras_senior' — the aliases expected by the pipeline.
 
-    Após essa chamada, o loader 'senior' pode ser pulado (no-op) porque as
-    tabelas já estão disponíveis no DuckDB para os outputs executarem o JOIN.
+    After this call, the 'senior' loader can be skipped (no-op) because the
+    tables are already present in DuckDB for the outputs to JOIN against.
     """
     mappings = [
         ("vendas_senior", "E140NFV"),

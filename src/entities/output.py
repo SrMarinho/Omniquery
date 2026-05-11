@@ -56,7 +56,7 @@ _DUCKDB_TO_PG: dict[str, str] = {
 
 
 def _cast_binary_to_hex(table: pa.Table) -> pa.Table:
-    """Converte colunas binárias para hex string no formato aceito pelo PostgreSQL bytea (\\xHEX)."""
+    """Convert binary columns to hex strings in the format accepted by PostgreSQL bytea (\\xHEX)."""
     new_columns: list[pa.ChunkedArray | pa.Array] = []
     changed = False
     for i, field in enumerate(table.schema):
@@ -73,7 +73,7 @@ def _cast_binary_to_hex(table: pa.Table) -> pa.Table:
 
 
 def _duckdb_type_to_pg(duckdb_type: str) -> str:
-    """Mapeia tipo DuckDB para PostgreSQL equivalente. Fallback: TEXT."""
+    """Map a DuckDB type to its PostgreSQL equivalent. Falls back to TEXT."""
     t = duckdb_type.upper()
     base = t.split("(")[0].strip()
     if base in ("DECIMAL", "NUMERIC"):
@@ -98,7 +98,7 @@ class DatabaseOutput(Output):
     output_database: str = Field(default="postgresql")
 
     def _transfer(self, source_database: DuckDBPyConnection, output_database: Engine, name: str, query: str) -> None:
-        """Transfere DuckDB -> PostgreSQL via BytesIO usando Arrow e COPY FROM STDIN."""
+        """Transfer DuckDB -> PostgreSQL through a BytesIO buffer using Arrow and COPY FROM STDIN."""
         conn = output_database.raw_connection()
 
         try:
@@ -132,8 +132,8 @@ class DatabaseOutput(Output):
             try:
                 pa_csv.write_csv(arrow_table, buf, write_options=write_opts)
             except pa.lib.ArrowInvalid:
-                # Fallback para dados com strings inválidas em UTF-8 (ex: NVARCHAR do SQL Server)
-                logger.debug("pa_csv.write_csv falhou com ArrowInvalid — usando fallback pandas")
+                # Fallback for data with invalid UTF-8 strings (e.g. SQL Server NVARCHAR).
+                logger.debug("pa_csv.write_csv failed with ArrowInvalid — falling back to pandas")
                 buf = io.BytesIO()
                 csv_str = arrow_table.to_pandas().to_csv(index=False, header=False)
                 buf.write(csv_str.encode("utf-8", errors="replace"))
@@ -165,7 +165,7 @@ class DatabaseOutput(Output):
         except OmniQueryError:
             raise
         except Exception as e:
-            logger.error("[dim]-> %s[/dim] | falhou -- %s", name, e)
+            logger.error("[dim]-> %s[/dim] | failed -- %s", name, e)
             raise OutputError(f"Failed to transfer data to table '{name}'") from e
 
         finally:
@@ -181,7 +181,7 @@ class DatabaseOutput(Output):
         return engine
 
     def run(self) -> None:
-        """Executa a transferencia de dados do DuckDB para o banco de dados de destino."""
+        """Run the data transfer from DuckDB to the destination database."""
         job_start = time.time()
 
         try:
@@ -192,7 +192,7 @@ class DatabaseOutput(Output):
             raise
         except Exception as e:
             elapsed = time.time() - job_start
-            logger.error("[dim]-> %s[/dim] | falhou em %.2fs -- %s", self.name, elapsed, e)
+            logger.error("[dim]-> %s[/dim] | failed in %.2fs -- %s", self.name, elapsed, e)
             raise OutputError(f"Job failed for '{self.name}'") from e
 
 
@@ -200,7 +200,7 @@ class FileOutput(Output):
     type: str = "file"
 
     def _transfer(self, source_engine: DuckDBPyConnection, file_path: str, query: str) -> None:
-        """Transfere DuckDB -> arquivo. CSV via COPY nativo; Excel via pandas."""
+        """Transfer DuckDB -> file. CSV uses DuckDB's native COPY; Excel uses pandas."""
         filepath = Path(file_path)
         filepath.parent.mkdir(parents=True, exist_ok=True)
 
@@ -247,15 +247,15 @@ class FileOutput(Output):
                     fmt_label,
                 )
             else:
-                logger.warning("[dim]-> %s[/dim] | sem dados", filepath.name)
+                logger.warning("[dim]-> %s[/dim] | no data", filepath.name)
 
         except OmniQueryError:
             raise
         except Exception as e:
-            logger.error("[dim]-> %s[/dim] | falhou -- %s (rows: %s)", filepath.name, e, f"{total_rows:,}")
+            logger.error("[dim]-> %s[/dim] | failed -- %s (rows: %s)", filepath.name, e, f"{total_rows:,}")
             if filepath.exists() and total_rows == 0:
                 filepath.unlink()
-                logger.info("[dim]-> %s[/dim] | arquivo incompleto removido", filepath.name)
+                logger.info("[dim]-> %s[/dim] | incomplete file removed", filepath.name)
             raise OutputError(f"Failed to write file '{filepath.name}'") from e
 
     def run(self) -> None:
@@ -268,7 +268,7 @@ class FileOutput(Output):
             raise
         except Exception as e:
             elapsed = time.time() - job_start
-            logger.error("[dim]-> %s[/dim] | falhou em %.2fs -- %s", Path(self.name).name, elapsed, e)
+            logger.error("[dim]-> %s[/dim] | failed in %.2fs -- %s", Path(self.name).name, elapsed, e)
             raise OutputError(f"Job failed for '{self.name}'") from e
 
 

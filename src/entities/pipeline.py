@@ -35,7 +35,7 @@ class Pipeline(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def create_concrete_loaders(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """Factory method para criar instâncias concretas de Loader"""
+        """Factory hook that builds concrete Loader instances from raw dicts."""
         if "loads" in data and isinstance(data["loads"], list):
             concrete_loaders: list[Loader] = []
 
@@ -46,7 +46,7 @@ class Pipeline(BaseModel):
                 elif isinstance(loader_data, Loader):
                     concrete_loaders.append(loader_data)
                 else:
-                    raise ValueError(f"Tipo inválido para output: {type(loader_data)}")
+                    raise ValueError(f"Invalid type for loader entry: {type(loader_data)}")
 
             data["loads"] = concrete_loaders
 
@@ -55,7 +55,7 @@ class Pipeline(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def create_concrete_outputs(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """Factory method para criar instâncias concretas de Output"""
+        """Factory hook that builds concrete Output instances from raw dicts."""
         if "outputs" in data and isinstance(data["outputs"], list):
             concrete_outputs = []
 
@@ -66,7 +66,7 @@ class Pipeline(BaseModel):
                 elif isinstance(output_data, Output):
                     concrete_outputs.append(output_data)
                 else:
-                    raise ValueError(f"Tipo inválido para output: {type(output_data)}")
+                    raise ValueError(f"Invalid type for output entry: {type(output_data)}")
 
             data["outputs"] = concrete_outputs
 

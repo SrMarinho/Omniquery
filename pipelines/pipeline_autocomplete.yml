@@ -1,9 +1,9 @@
 name: teste_autocomplete
-description: Pipeline para testar autocomplete
+description: Pipeline used to test autocomplete
 parameters:
   - name: title
-    description: Título do pipeline
-    default: Teste Autocomplete
+    description: Pipeline title
+    default: Autocomplete Test
     required: false
     type: string
 loads:

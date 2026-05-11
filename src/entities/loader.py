@@ -36,7 +36,7 @@ except ImportError:
 
 
 def _to_cx_url(sqlalchemy_url: str) -> str | None:
-    """Converte URL SQLAlchemy para formato connectorx. Retorna None para dialetos nao suportados."""
+    """Convert a SQLAlchemy URL to connectorx format. Returns None for unsupported dialects."""
     try:
         url = make_url(sqlalchemy_url)
         dialect = url.drivername.split("+")[0]
@@ -54,7 +54,7 @@ def _to_cx_url(sqlalchemy_url: str) -> str | None:
 
 
 def _to_turbodbc_connstr(sqlalchemy_url: str) -> str | None:
-    """Constroi connection string ODBC para turbodbc. Retorna None para dialetos nao suportados."""
+    """Build an ODBC connection string for turbodbc. Returns None for unsupported dialects."""
     try:
         url = make_url(sqlalchemy_url)
         dialect = url.drivername.split("+")[0]
@@ -128,9 +128,9 @@ class DatabaseLoader(Loader):
             raise
         except Exception as e:
             elapsed = time.time() - job_start
-            logger.error("[dim]%s[/dim] | falhou em %.2fs -- %s", self.source, elapsed, e)
+            logger.error("[dim]%s[/dim] | failed in %.2fs -- %s", self.source, elapsed, e)
             if "tables_processed" in locals():
-                logger.error("  %d/%d tabelas concluidas", tables_processed, len(self.tables))
+                logger.error("  %d/%d tables completed", tables_processed, len(self.tables))
             raise LoaderError(f"Failed to load from source '{self.source}'") from e
 
     def _transfer(self, source_engine: Engine, to_engine: DuckDBPyConnection, table: Table) -> None:
@@ -146,7 +146,10 @@ class DatabaseLoader(Loader):
                     data_bytes = self._transfer_via_turbodbc(turbodbc_connstr, to_engine, table)
                 except Exception as e:
                     logger.warning(
-                        "[dim]%s[/dim] | %s -- turbodbc falhou (%s), usando pandas", self.source, table.alias, e
+                        "[dim]%s[/dim] | %s -- turbodbc failed (%s), falling back to pandas",
+                        self.source,
+                        table.alias,
+                        e,
                     )
                     data_bytes = self._transfer_via_pandas(source_engine, to_engine, table)
             else:
@@ -172,7 +175,7 @@ class DatabaseLoader(Loader):
             raise LoaderError(f"Failed to transfer table '{table.alias}'") from e
 
     def _transfer_via_arrow(self, cx_url: str, to_engine: DuckDBPyConnection, table: Table) -> int:
-        """Le via connectorx -> Arrow -> DuckDB. Remove timezone de colunas timestamp para evitar dependencia de ICU tzdata."""
+        """Read via connectorx -> Arrow -> DuckDB. Strips timezone info from timestamp columns to avoid the ICU tzdata dependency."""
         import connectorx as cx
 
         arrow_table: pa.Table = cx.read_sql(cx_url, table.content, return_type="arrow")  # type: ignore[assignment]
@@ -196,8 +199,8 @@ class DatabaseLoader(Loader):
         return data_bytes
 
     def _transfer_via_pandas(self, source_engine: Engine, to_engine: DuckDBPyConnection, table: Table) -> int:
-        """Le via pandas em chunks e converte para Arrow antes de inserir no DuckDB."""
-        logger.info("[dim]%s[/dim] | %-30s  carregando...", self.source, table.alias)
+        """Read via pandas in chunks, convert to Arrow, and insert into DuckDB."""
+        logger.info("[dim]%s[/dim] | %-30s  loading...", self.source, table.alias)
 
         total_rows = 0
         total_bytes = 0
@@ -237,7 +240,7 @@ class DatabaseLoader(Loader):
         return total_bytes
 
     def _transfer_via_turbodbc(self, connstr: str, to_engine: DuckDBPyConnection, table: Table) -> int:
-        """Le via turbodbc -> Arrow -> DuckDB. Usado para Oracle via ODBC."""
+        """Read via turbodbc -> Arrow -> DuckDB. Used for Oracle through ODBC."""
         conn = _turbodbc.connect(connection_string=connstr)
         try:
             cursor = conn.cursor()

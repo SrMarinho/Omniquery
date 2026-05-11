@@ -1,14 +1,14 @@
 name: senior_connection_test
-description: Pipeline para testar conexão com o Senior
+description: Pipeline used to test the Senior connection
 parameters:
   - name: title
-    description: Título do pipeline
+    description: Pipeline title
 loads:
   - type: database
     source: senior
     tables:
       - alias: clientes
-        description: Consulta de clientes da Senior
+        description: Senior customers query
         type: inline
         content: SELECT * FROM SAPIENS_PROD.E070FIL OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY
 outputs:

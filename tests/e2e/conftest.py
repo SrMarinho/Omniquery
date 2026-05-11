@@ -1,15 +1,15 @@
 """
-Fixtures e utilitários compartilhados para a suíte de testes de homologação.
+Shared fixtures and utilities for the homolog (E2E) test suite.
 
-Requer credenciais nos env vars (ver .env.example).
-Testes são pulados automaticamente quando as credenciais estão ausentes.
+Requires credentials in env vars (see .env.example).
+Tests are skipped automatically when the matching credentials are missing.
 
-Execução:
-    uv run pytest tests/homolog/ -v -s -m homolog
+Run:
+    uv run pytest tests/e2e/ -v -s -m homolog
 
-Flags úteis:
-    --rows=N        linhas sintéticas para benchmarks de output (default: 100_000)
-    --repeat=N      repetições por benchmark (default: 3)
+Useful flags:
+    --rows=N        synthetic rows for output benchmarks (default: 100_000)
+    --repeat=N      repetitions per benchmark (default: 3)
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ console = Console(
 )
 
 # ---------------------------------------------------------------------------
-# CLI options (--rows e --repeat já registrados em tests/conftest.py)
+# CLI options (--rows and --repeat are already registered in tests/conftest.py).
 # ---------------------------------------------------------------------------
 
 
@@ -56,7 +56,7 @@ def repeat(request: pytest.FixtureRequest) -> int:
 
 
 class ResourceMonitor:
-    """Amostra métricas de sistema em background durante a execução de um workload."""
+    """Sample system metrics in a background thread while a workload runs."""
 
     def __init__(self, interval_s: float = 0.25) -> None:
         self._interval = interval_s
@@ -76,7 +76,7 @@ class ResourceMonitor:
         self._stop.clear()
         self._ram_mb.clear()
         self._cpu_pct.clear()
-        # warm-up cpu_percent (primeira chamada retorna 0.0)
+        # Warm up cpu_percent — the first call always returns 0.0.
         self._proc.cpu_percent(interval=None)
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -142,7 +142,7 @@ class ResourceMonitor:
 
 @contextmanager
 def monitor_run(interval_s: float = 0.25) -> Generator[ResourceMonitor, None, None]:
-    """Context manager que inicia e para o ResourceMonitor automaticamente."""
+    """Context manager that starts and stops a ResourceMonitor automatically."""
     m = ResourceMonitor(interval_s)
     m.start()
     try:
@@ -152,7 +152,7 @@ def monitor_run(interval_s: float = 0.25) -> Generator[ResourceMonitor, None, No
 
 
 # ---------------------------------------------------------------------------
-# Reporting (segue o padrão de bench_transfer.py)
+# Reporting (follows the bench_transfer.py format).
 # ---------------------------------------------------------------------------
 
 
@@ -161,20 +161,20 @@ def print_homolog_results(
     results: list[tuple[str, float, float, float, float, float, float, float, str]],
 ) -> None:
     """
-    Imprime tabela Rich com métricas de homologação.
+    Print a Rich table with homolog metrics.
 
-    Colunas: Operacao | Min | Media | Max | MB/s | RAM pico (MB) | CPU med (%) | Rede recv (MB) | Nota
+    Columns: Operation | Min | Mean | Max | MB/s | RAM peak (MB) | CPU avg (%) | Net recv (MB) | Note
     """
     table = Table(title=title, border_style="cyan", show_lines=True)
-    table.add_column("Operacao", style="bold white", min_width=45)
+    table.add_column("Operation", style="bold white", min_width=45)
     table.add_column("Min", justify="right")
-    table.add_column("Media", justify="right")
+    table.add_column("Mean", justify="right")
     table.add_column("Max", justify="right")
     table.add_column("MB/s", justify="right", style="cyan")
-    table.add_column("RAM pico (MB)", justify="right", style="yellow")
-    table.add_column("CPU med (%)", justify="right", style="magenta")
-    table.add_column("Rede recv (MB)", justify="right", style="green")
-    table.add_column("Nota", style="dim")
+    table.add_column("RAM peak (MB)", justify="right", style="yellow")
+    table.add_column("CPU avg (%)", justify="right", style="magenta")
+    table.add_column("Net recv (MB)", justify="right", style="green")
+    table.add_column("Note", style="dim")
 
     for name, mn, mean, mx, mb_s, ram_peak, cpu_avg, net_recv, note in results:
         mb_s_str = f"{mb_s:,.1f}" if mb_s > 0 else "-"
@@ -189,17 +189,17 @@ def print_homolog_results(
 
 
 # ---------------------------------------------------------------------------
-# Fixture: reset do singleton memory_database entre testes de pipeline
+# Fixture: reset the memory_database singleton between pipeline tests.
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
 def fresh_memory_database() -> Generator[duckdb.DuckDBPyConnection, None, None]:
     """
-    Substitui o singleton global memory_database por uma conexão limpa.
+    Replace the global memory_database singleton with a fresh connection.
 
-    Necessário porque App.run() chama memory_database.close() ao final,
-    invalidando o singleton para o próximo teste.
+    Required because App.run() calls memory_database.close() at the end, which
+    invalidates the singleton for the next test.
     """
     import src.config as _cfg
     import src.config.database as _db
@@ -221,7 +221,7 @@ def fresh_memory_database() -> Generator[duckdb.DuckDBPyConnection, None, None]:
 
 
 # ---------------------------------------------------------------------------
-# Fixtures de skip por grupo de credenciais
+# Skip fixtures grouped by credential set.
 # ---------------------------------------------------------------------------
 
 _PROCFIT_VARS = [
@@ -253,31 +253,31 @@ _SENIOR_VARS = [
 def require_procfit() -> None:
     missing = [v for v in _PROCFIT_VARS if not os.getenv(v)]
     if missing:
-        pytest.skip(f"Credenciais Procfit (SQL Server) ausentes: {missing}")
+        pytest.skip(f"Procfit (SQL Server) credentials missing: {missing}")
 
 
 @pytest.fixture
 def require_postgresql() -> None:
     missing = [v for v in _POSTGRESQL_VARS if not os.getenv(v)]
     if missing:
-        pytest.skip(f"Credenciais PostgreSQL ausentes: {missing}")
+        pytest.skip(f"PostgreSQL credentials missing: {missing}")
 
 
 @pytest.fixture
 def require_senior() -> None:
     missing = [v for v in _SENIOR_VARS if not os.getenv(v)]
     if missing:
-        pytest.skip(f"Credenciais Senior (Oracle) ausentes: {missing}")
+        pytest.skip(f"Senior (Oracle) credentials missing: {missing}")
 
 
 # ---------------------------------------------------------------------------
-# Fixture: intervalo de datas (últimos 30 dias)
+# Fixture: date range — last 30 days.
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
 def pipeline_date_params() -> dict:  # type: ignore[type-arg]
-    """Parâmetros de data para pipelines — últimos 30 dias para limitar volume."""
+    """Date parameters for pipelines — last 30 days, to keep volume bounded."""
     end = date.today()
     start = end - timedelta(days=30)
     return {"data_inicio": start, "data_fim": end}

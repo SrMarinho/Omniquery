@@ -1,4 +1,4 @@
-"""Valida todos os pipelines YAML em pipelines/ contra o JSON Schema."""
+"""Validate every pipeline YAML under pipelines/ against the JSON Schema."""
 
 import json
 import sys
@@ -18,7 +18,7 @@ def main() -> int:
 
     pipelines = sorted([*PIPELINES_DIR.glob("*.yaml"), *PIPELINES_DIR.glob("*.yml")])
     if not pipelines:
-        print("Nenhum pipeline encontrado em pipelines/")
+        print("No pipeline files found under pipelines/")
         return 0
 
     errors_found = False
@@ -29,7 +29,7 @@ def main() -> int:
             errors_found = True
             print(f"[FAIL] {pipeline_file.name}")
             for e in errors:
-                path = " > ".join(str(p) for p in e.absolute_path) or "(raiz)"
+                path = " > ".join(str(p) for p in e.absolute_path) or "(root)"
                 print(f"       {path}: {e.message}")
         else:
             print(f"[OK]   {pipeline_file.name}")

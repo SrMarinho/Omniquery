@@ -4,7 +4,7 @@ loads:
     source: procfit
     tables:
       - alias: clientes_datas
-        description: Consulta clientes
+        description: Customer query
         type: inline
         content: |
           WITH TEMP_PV_PARAMETROS_ENTIDADES AS (

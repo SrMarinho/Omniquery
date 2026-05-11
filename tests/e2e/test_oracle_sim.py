@@ -1,12 +1,12 @@
 """
-Testes da simulação Oracle (sem dependências externas).
+Oracle simulation tests (no external dependencies).
 
-Valida que o schema sintético é compatível com as queries do pipeline
-divergencia_pbs_snr.yaml. Estes testes sempre rodam — não precisam de
-credenciais de banco real.
+Validates that the synthetic schema is compatible with the queries from the
+divergencia_pbs_snr pipeline. These tests always run — they do not need real
+database credentials.
 
-Execução:
-    uv run pytest tests/homolog/test_oracle_sim.py -v -s
+Run:
+    uv run pytest tests/e2e/test_oracle_sim.py -v -s
 """
 
 import time
@@ -17,38 +17,38 @@ from tests.e2e.conftest import ResourceMonitor, print_homolog_results
 from tests.e2e.oracle_sim.schema import build_oracle_sim, register_oracle_sim_tables
 
 
-def test_oracle_sim_cria_tabelas() -> None:
-    """build_oracle_sim() deve criar E140NFV e E440NFC com linhas corretas."""
+def test_oracle_sim_creates_tables() -> None:
+    """build_oracle_sim() must create E140NFV and E440NFC with the expected row counts."""
     n = 1_000
     con = build_oracle_sim(n_rows=n)
 
     count_nfv = con.execute("SELECT COUNT(*) FROM E140NFV").fetchone()[0]  # type: ignore[index]
     count_nfc = con.execute("SELECT COUNT(*) FROM E440NFC").fetchone()[0]  # type: ignore[index]
 
-    assert count_nfv == n, f"E140NFV: esperado {n}, obtido {count_nfv}"
-    assert count_nfc == n, f"E440NFC: esperado {n}, obtido {count_nfc}"
+    assert count_nfv == n, f"E140NFV: expected {n}, got {count_nfv}"
+    assert count_nfc == n, f"E440NFC: expected {n}, got {count_nfc}"
 
 
 def test_oracle_sim_schema_e140nfv() -> None:
-    """E140NFV deve ter exatamente as colunas usadas pelo pipeline."""
+    """E140NFV must expose the exact columns used by the pipeline."""
     con = build_oracle_sim(n_rows=10)
     cols = {row[0].upper() for row in con.execute("DESCRIBE E140NFV").fetchall()}
 
-    esperadas = {"CODEMP", "CODFIL", "DATEMI", "NUMNFV", "VLRBPR", "DATGER", "VLRLIQ"}
-    assert esperadas.issubset(cols), f"Colunas faltando em E140NFV: {esperadas - cols}"
+    expected = {"CODEMP", "CODFIL", "DATEMI", "NUMNFV", "VLRBPR", "DATGER", "VLRLIQ"}
+    assert expected.issubset(cols), f"Missing columns in E140NFV: {expected - cols}"
 
 
 def test_oracle_sim_schema_e440nfc() -> None:
-    """E440NFC deve ter exatamente as colunas usadas pelo pipeline."""
+    """E440NFC must expose the exact columns used by the pipeline."""
     con = build_oracle_sim(n_rows=10)
     cols = {row[0].upper() for row in con.execute("DESCRIBE E440NFC").fetchall()}
 
-    esperadas = {"CODEMP", "CODFIL", "DATENT", "NUMNFC", "VLRBPR", "DATGER", "VLRLIQ"}
-    assert esperadas.issubset(cols), f"Colunas faltando em E440NFC: {esperadas - cols}"
+    expected = {"CODEMP", "CODFIL", "DATENT", "NUMNFC", "VLRBPR", "DATGER", "VLRLIQ"}
+    assert expected.issubset(cols), f"Missing columns in E440NFC: {expected - cols}"
 
 
 def test_oracle_sim_register_tables() -> None:
-    """register_oracle_sim_tables() deve criar vendas_senior e compras_senior no target."""
+    """register_oracle_sim_tables() must create vendas_senior and compras_senior in the target."""
     sim_con = build_oracle_sim(n_rows=500)
     target_con = duckdb.connect(":memory:")
 
@@ -63,15 +63,15 @@ def test_oracle_sim_register_tables() -> None:
 
 def test_oracle_sim_join_divergencia_saidas() -> None:
     """
-    Executa a query exata de divergencia_saidas do pipeline contra a simulação.
-    Valida que o schema é compatível com o JOIN definido no YAML.
+    Run the exact `divergencia_saidas` query from the pipeline against the simulation.
+    Confirms the schema is compatible with the JOIN defined in the YAML.
     """
     sim_con = build_oracle_sim(n_rows=1_000)
     target_con = duckdb.connect(":memory:")
 
     register_oracle_sim_tables(sim_con, target_con)
 
-    # Cria nf_faturamento sintético com colunas compatíveis com o pipeline
+    # Build a synthetic nf_faturamento with columns compatible with the pipeline.
     target_con.execute("""
         CREATE TABLE nf_faturamento AS
         SELECT
@@ -94,7 +94,7 @@ def test_oracle_sim_join_divergencia_saidas() -> None:
         SELECT * FROM nf_faturamento LIMIT 0
     """)
 
-    # Query exata do pipeline (divergencia_saidas)
+    # Exact query from the pipeline (divergencia_saidas).
     divergencia_saidas_query = """
         SELECT A.*, B.*
         FROM nf_faturamento A
@@ -118,21 +118,19 @@ def test_oracle_sim_join_divergencia_saidas() -> None:
     """
 
     result = target_con.execute(divergencia_saidas_query).fetchall()
-    # Não importa quantas divergências — importa que a query executou sem erro
+    # The count of divergences does not matter — what matters is that the query ran without errors.
     assert isinstance(result, list)
-    print(f"\n  OK divergencia_saidas: {len(result)} divergencias encontradas na simulacao")
+    print(f"\n  OK divergencia_saidas: {len(result)} divergences found in the simulation")
 
 
 def test_oracle_sim_join_divergencia_entradas() -> None:
-    """
-    Executa a query exata de divergencia_entradas do pipeline contra a simulação.
-    """
+    """Run the exact `divergencia_entradas` query from the pipeline against the simulation."""
     sim_con = build_oracle_sim(n_rows=1_000)
     target_con = duckdb.connect(":memory:")
 
     register_oracle_sim_tables(sim_con, target_con)
 
-    # Cria nf_compras sintético
+    # Build a synthetic nf_compras.
     target_con.execute("""
         CREATE TABLE nf_compras AS
         SELECT
@@ -177,11 +175,11 @@ def test_oracle_sim_join_divergencia_entradas() -> None:
 
     result = target_con.execute(divergencia_entradas_query).fetchall()
     assert isinstance(result, list)
-    print(f"\n  OK divergencia_entradas: {len(result)} divergencias encontradas na simulacao")
+    print(f"\n  OK divergencia_entradas: {len(result)} divergences found in the simulation")
 
 
 def test_oracle_sim_performance() -> None:
-    """Mede o custo de gerar e registrar a simulação Oracle (referência de overhead)."""
+    """Measure the cost of building and registering the Oracle simulation (overhead reference)."""
     results = []
 
     for n_rows in [10_000, 50_000, 100_000]:
@@ -213,4 +211,4 @@ def test_oracle_sim_performance() -> None:
             )
         )
 
-    print_homolog_results("Oracle Simulation — overhead de geração e registro", results)
+    print_homolog_results("Oracle simulation — build and register overhead", results)

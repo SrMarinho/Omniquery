@@ -32,11 +32,11 @@ class App:
             self.pipeline = Pipeline(**raw, **kwargs)
         except ValidationError as e:
             errors = e.errors()
-            logger.error("Pipeline invalido -- %d erro(s):", len(errors))
+            logger.error("Invalid pipeline -- %d error(s):", len(errors))
             for err in errors:
                 field = " -> ".join(str(loc) for loc in err["loc"])
                 logger.error("  '%s': %s", field, err["msg"])
-            raise PipelineError(f"Pipeline invalido: {self.pipeline_args}") from e
+            raise PipelineError(f"Invalid pipeline: {self.pipeline_args}") from e
 
     def load_pipeline(self) -> dict[str, Any]:
         if isinstance(self.pipeline_args, str):
@@ -46,12 +46,12 @@ class App:
             raise ValueError("Invalid type for pipeline argument")
 
     def _substitute_parameters(self, data: Any, params: dict[str, str]) -> Any:
-        """Substitui {{ param }} nos valores de string do pipeline recursivamente."""
+        """Recursively substitute {{ param }} placeholders in all string values of the pipeline."""
 
         def replace_match(match: re.Match) -> str:  # type: ignore[type-arg]
             key = str(match.group(1)).strip()
             if key not in params:
-                logger.warning("parametro '{{ %s }}' nao fornecido", key)
+                logger.warning("parameter '{{ %s }}' not provided", key)
                 return str(match.group(0))
             return params[key]
 
@@ -64,24 +64,24 @@ class App:
         return data
 
     def pipeline_parameters(self) -> dict:  # type: ignore[type-arg]
-        """Retorna os parametros do pipeline, se existirem."""
+        """Return the pipeline parameters, if any."""
         return getattr(self.pipeline, "parameters", {})
 
     def _print_dry_run_summary(self) -> None:
         p = self.pipeline
-        logger.info("dry-run: [bold]%s[/bold]", p.name or "(sem nome)")
+        logger.info("dry-run: [bold]%s[/bold]", p.name or "(unnamed)")
         if p.description:
             logger.info("  %s", p.description)
         logger.info("  loaders (%d):", len(p.loads))
         for loader in p.loads:
-            logger.info("    [%s] %s -- %d tabela(s)", loader.type, loader.source, len(loader.tables))
+            logger.info("    [%s] %s -- %d table(s)", loader.type, loader.source, len(loader.tables))
             for table in loader.tables:
                 logger.info("      - %s", table.alias)
         logger.info("  outputs (%d):", len(p.outputs))
         for output in p.outputs:
             logger.info("    [%s] %s", output.type, output.name)
         if p.parameters:
-            logger.info("  parametros (%d):", len(p.parameters))
+            logger.info("  parameters (%d):", len(p.parameters))
             for param in p.parameters:
                 logger.info("      - %s (%s)", param.name, param.type)
 
@@ -102,9 +102,9 @@ class App:
         try:
             self.pipeline.run()
         except Exception as e:
-            logger.error("[bold]%s[/bold] | falhou -- %s", name, e)
+            logger.error("[bold]%s[/bold] | failed -- %s", name, e)
             raise
         finally:
             total_time = time.time() - start_time
-            logger.info("[bold cyan]%s[/bold cyan] | concluido em [bold]%.2fs[/bold]", name, total_time)
+            logger.info("[bold cyan]%s[/bold cyan] | done in [bold]%.2fs[/bold]", name, total_time)
             memory_database.close()

@@ -1,18 +1,18 @@
 class OmniQueryError(Exception):
-    """Exceção base do OmniQuery."""
+    """Base exception for OmniQuery."""
 
 
 class ConfigError(OmniQueryError):
-    """Erro de configuração (databases.yaml, .env, pipeline YAML)."""
+    """Configuration error (databases.yaml, .env, pipeline YAML)."""
 
 
 class PipelineError(OmniQueryError):
-    """Erro na definição ou validação de um pipeline."""
+    """Pipeline definition or validation error."""
 
 
 class LoaderError(OmniQueryError):
-    """Erro durante a carga de dados de uma fonte."""
+    """Error while loading data from a source."""
 
 
 class OutputError(OmniQueryError):
-    """Erro durante a escrita de dados em um destino."""
+    """Error while writing data to a destination."""
